@@ -1,42 +1,71 @@
+# terminal (yst.ru): шины — JSON массив, диски — XML
+# tires JSON: code, article, name, brand, type, model, width, height, diametr, speed_index, load_index, thorn, runflat, season, price, price_b2b, restyar, restspb, restekb, restrnd, restmsk, restotherstock, picture
+# wheels XML: //disk — code, brand, model, name, width, diametr, bolts_count, bolts_spacing, et, dia, color, wheelType, picture, price, price_b2b, restyar, restspb...
 supplier_id: "supplier_4"
-supplier_name: "Поставщик 4"
-item_xpath_tires: "//offer"
-item_xpath_wheels: "//offer"
+supplier_name: "terminal"
+
+# для JSON item_xpath не используется (корень — массив)
+item_xpath_tires: "//tyre"
+item_xpath_wheels: "//disk"
 
 tires:
   field_mapping:
     SHIRINA_PROFILYA: "width"
     VYSOTA_PROFILYA: "height"
-    POSADOCHNYY_DIAMETR: "diameter"
-    PROIZVODITEL: "manufacturer"
+    POSADOCHNYY_DIAMETR: "diametr"
+    PROIZVODITEL: "brand"
     SEZONNOST: "season"
-    SHIPY: "studs"
-    MORE_PHOTO: "photos"
+    SHIPY: "thorn"
+    MORE_PHOTO: "picture"
     INDEKS_NAGRUZKI: "load_index"
     INDEKS_SKOROSTI: "speed_index"
-    CML2_ARTICLE: "article"
+    CML2_ARTICLE: "article|code"
     MODEL_AVTOSHINY: "model"
-    HOMOLOGATION: "homologation"
     OS_SUPPLIER_TEXT: "supplier"
-    price: "cost"
-    quantity: "stock"
-  value_transforms: {}
+    price: "price_b2b|price"
+  quantity_sum_fields:
+    - restyar
+    - restspb
+    - restekb
+    - restrnd
+    - restmsk
+    - restotherstock
+  price_min_fields:
+    - price_b2b
+    - price
+  value_transforms:
+    SEZONNOST:
+      cargo: "Грузовые"
+      winter: "Зимняя"
+      summer: "Летняя"
+      all: "Всесезонная"
+    SHIPY:
+      "0": "0"
+      "1": "1"
 
 wheels:
   field_mapping:
     SHIRINA_DISKA: "width"
-    POSADOCHNYY_DIAMETR_DISKA: "diameter"
-    COUNT_OTVERSTIY: "holes"
-    MEZHBOLTOVOE_RASSTOYANIE: "pcd"
+    POSADOCHNYY_DIAMETR_DISKA: "diametr"
+    COUNT_OTVERSTIY: "bolts_count"
+    MEZHBOLTOVOE_RASSTOYANIE: "bolts_spacing"
     VYLET_DISKA: "et"
     DIAMETR_STUPITSY: "dia"
-    MORE_PHOTO: "photos"
-    CML2_ARTICLE: "article"
-    WHEEL_TYPE: "type"
+    MORE_PHOTO: "picture"
+    CML2_ARTICLE: "article|code"
+    WHEEL_TYPE: "wheelType"
     MODEL_DISKA: "model"
     OS_SUPPLIER_TEXT: "supplier"
-    PROIZVODITEL: "manufacturer"
+    PROIZVODITEL: "brand"
     DISK_COLOR: "color"
-    price: "price_rub"
-    quantity: "qty"
+    price: "price_b2b|price"
+  quantity_sum_fields:
+    - restyar
+    - restspb
+    - restekb
+    - restrnd
+    - restmsk
+  price_min_fields:
+    - price_b2b
+    - price
   value_transforms: {}

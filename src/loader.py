@@ -1,10 +1,11 @@
 """
-Загрузка XML по URL с обработкой ошибок, retry, таймаутом.
+Загрузка XML/JSON по URL с обработкой ошибок, retry, таймаутом.
 Файлы сначала сохраняются в кэш, затем парсятся — экономия памяти на больших выгрузках.
 """
+import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import requests
 from lxml import etree
@@ -61,6 +62,37 @@ def parse_xml_from_file(filepath: Path) -> Optional[etree._Element]:
         return None
 
 
+def parse_json_from_file(filepath: Path):
+    """Распарсить JSON из файла. Возвращает данные или None при ошибке."""
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Ошибка парсинга JSON %s: %s", filepath, e)
+        return None
+
+
+def parse_file_by_content(filepath: Path) -> tuple[Optional[Union[etree._Element, list]], str]:
+    """
+    Определить формат по содержимому и распарсить.
+    Возвращает (root/elements, "xml"|"json") или (None, "") при ошибке.
+    """
+    try:
+        first_bytes = filepath.read_bytes()[:50]
+        first_chars = first_bytes.decode("utf-8", errors="ignore").lstrip()
+        if first_chars.startswith("[") or first_chars.startswith("{"):
+            data = parse_json_from_file(filepath)
+            if data is not None:
+                items = data if isinstance(data, list) else []
+                return (items, "json")
+        # XML
+        root = parse_xml_from_file(filepath)
+        return (root, "xml") if root is not None else (None, "")
+    except Exception as e:
+        logger.error("Ошибка чтения %s: %s", filepath, e)
+        return (None, "")
+
+
 def load_products_from_url(
     url: str,
     supplier_id: str,
@@ -97,27 +129,27 @@ def load_products_from_url(
             logger.exception("Неожиданная ошибка загрузки %s: %s", url, e)
             return []
 
-    root = parse_xml_from_file(cache_file)
-    if root is None:
+    parsed, fmt = parse_file_by_content(cache_file)
+    if parsed is None:
         return []
 
-    # XPath к элементам товаров
-    cfg = get_adapter_config(supplier_id, config_dir)
-    if cfg:
-        key = f"item_xpath_{category}"
-        item_xpath = cfg.get(key, "//offer")
+    if fmt == "json":
+        items = parsed if isinstance(parsed, list) else []
     else:
-        item_xpath = "//offer"
-
-    try:
-        items = root.xpath(item_xpath)
-    except Exception as e:
-        logger.error("Ошибка XPath %s: %s", item_xpath, e)
-        return []
+        cfg = get_adapter_config(supplier_id, config_dir)
+        item_xpath = cfg.get(f"item_xpath_{category}", "//offer") if cfg else "//offer"
+        try:
+            items = parsed.xpath(item_xpath)
+        except Exception as e:
+            logger.error("Ошибка XPath %s: %s", item_xpath, e)
+            return []
 
     products: list[Product] = []
     for elem in items:
-        if not hasattr(elem, "tag"):
+        if fmt == "json":
+            if not isinstance(elem, dict):
+                continue
+        elif not hasattr(elem, "tag"):
             continue
         p = adapter.parse_product(elem, category)
         if p:

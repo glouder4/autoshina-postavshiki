@@ -39,6 +39,6 @@ wheels:
     OS_SUPPLIER_TEXT: "supplier"
     PROIZVODITEL: "SMARKA"
     DISK_COLOR: "SCOLOR"
-    price: "NPRICE_PREPAYMENT"
+    price: "NPRICE_RRP"
     quantity: "NREST"
   value_transforms: {}

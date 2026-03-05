@@ -27,6 +27,8 @@ EXPORT_TRANSFORMS_TIRES: dict[str, dict[str, str]] = {
         "нешипованная": "no_ship", "нешипованные": "no_ship",
         "без шипов": "no_ship", "без шипа": "no_ship",
         "yes": "ship", "no": "no_ship",
+        "_": "no_ship",
+        "ш.": "ship", "ш": "ship",
     },
 }
 

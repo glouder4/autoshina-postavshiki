@@ -30,10 +30,17 @@ class BaseAdapter:
         self.quantity_sum_fields = quantity_sum_fields or []
         self.price_min_fields = price_min_fields or []
 
-    def _get_text(self, elem: etree._Element, tag: str) -> str:
-        """Получить текст дочернего элемента или атрибут. Поддержка fallback: "field1|field2"."""
+    def _get_text(self, elem, tag: str) -> str:
+        """Получить текст дочернего элемента, атрибута или ключа dict. Поддержка fallback: "field1|field2"."""
         for t in tag.split("|"):
             t = t.strip()
+            if not t:
+                continue
+            if isinstance(elem, dict):
+                val = elem.get(t)
+                if val is not None and str(val).strip():
+                    return str(val).strip()
+                continue
             child = elem.find(t)
             if child is not None and child.text:
                 return child.text.strip()
@@ -49,7 +56,7 @@ class BaseAdapter:
             return transforms[value]
         return value
 
-    def _parse_product_element(self, elem: etree._Element) -> dict[str, Any]:
+    def _parse_product_element(self, elem) -> dict[str, Any]:
         """Извлечь данные из XML-элемента по маппингу."""
         result: dict[str, Any] = {}
         for our_field, supplier_field in self.field_mapping.items():
@@ -60,7 +67,7 @@ class BaseAdapter:
                 result[our_field] = ""
         return result
 
-    def _parse_price(self, elem: etree._Element) -> float:
+    def _parse_price(self, elem) -> float:
         """Взять минимальную цену по полям price_min_fields (самая дешёвая по складам)."""
         if not self.price_min_fields:
             raw = self._get_text(
@@ -83,7 +90,7 @@ class BaseAdapter:
                     pass
         return min(prices) if prices else 0.0
 
-    def _parse_quantity(self, elem: etree._Element) -> int:
+    def _parse_quantity(self, elem) -> int:
         """Суммировать остатки по полям quantity_sum_fields. «более 40» → 40."""
         if not self.quantity_sum_fields:
             raw = self._get_text(
@@ -107,7 +114,7 @@ class BaseAdapter:
                 pass
         return total
 
-    def parse_product(self, elem: etree._Element, category: str) -> Optional[Product]:
+    def parse_product(self, elem, category: str) -> Optional[Product]:
         """
         Преобразовать XML-элемент в Product.
         Возвращает None при ошибке (логируем и пропускаем).

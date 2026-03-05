@@ -1,42 +1,53 @@
+# shinservice: tires и wheels — отдельные файлы, атрибуты на элементе
+# tire: width, profile, diam, brand, model, season, pin, load, speed, sku, photo, price, stock
+# wheel: diameter (16/6.5J), pn, pcd, et, centerbore, type, color, sku, photo, price, stock
 supplier_id: "supplier_3"
-supplier_name: "Поставщик 3"
-item_xpath_tires: "//offer"
-item_xpath_wheels: "//offer"
+supplier_name: "shinservice"
+item_xpath_tires: "//tires/tire"
+item_xpath_wheels: "//wheels/wheel"
 
 tires:
   field_mapping:
     SHIRINA_PROFILYA: "width"
-    VYSOTA_PROFILYA: "height"
-    POSADOCHNYY_DIAMETR: "diameter"
-    PROIZVODITEL: "manufacturer"
+    VYSOTA_PROFILYA: "profile"
+    POSADOCHNYY_DIAMETR: "diam"
+    PROIZVODITEL: "brand"
     SEZONNOST: "season"
-    SHIPY: "studs"
-    MORE_PHOTO: "photos"
-    INDEKS_NAGRUZKI: "load_index"
-    INDEKS_SKOROSTI: "speed_index"
-    CML2_ARTICLE: "article"
+    SHIPY: "pin"
+    MORE_PHOTO: "photo"
+    INDEKS_NAGRUZKI: "load"
+    INDEKS_SKOROSTI: "speed"
+    CML2_ARTICLE: "sku"
     MODEL_AVTOSHINY: "model"
     HOMOLOGATION: "homologation"
     OS_SUPPLIER_TEXT: "supplier"
-    price: "cost"
+    price: "price"
     quantity: "stock"
-  value_transforms: {}
+  value_transforms:
+    SEZONNOST:
+      w: "Зимняя"
+      s: "Летняя"
+      u: "Всесезонная"
+      a: "Всесезонная"
+    SHIPY:
+      Y: "1"
+      N: "0"
 
 wheels:
   field_mapping:
-    SHIRINA_DISKA: "width"
+    SHIRINA_DISKA: "diameter"
     POSADOCHNYY_DIAMETR_DISKA: "diameter"
-    COUNT_OTVERSTIY: "holes"
+    COUNT_OTVERSTIY: "pn"
     MEZHBOLTOVOE_RASSTOYANIE: "pcd"
     VYLET_DISKA: "et"
-    DIAMETR_STUPITSY: "dia"
-    MORE_PHOTO: "photos"
-    CML2_ARTICLE: "article"
+    DIAMETR_STUPITSY: "centerbore"
+    MORE_PHOTO: "photo"
+    CML2_ARTICLE: "sku"
     WHEEL_TYPE: "type"
     MODEL_DISKA: "model"
     OS_SUPPLIER_TEXT: "supplier"
-    PROIZVODITEL: "manufacturer"
+    PROIZVODITEL: "brand"
     DISK_COLOR: "color"
-    price: "price_rub"
-    quantity: "qty"
+    price: "price"
+    quantity: "stock"
   value_transforms: {}
