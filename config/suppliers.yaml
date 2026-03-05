@@ -1,0 +1,32 @@
+# Сводный конфиг поставщиков
+# active: false — не загружаем, товары исключаем из выгрузки
+update_interval_minutes: 60
+request_timeout_seconds: 60
+# Папка для кэша загруженных XML (относительно корня проекта)
+cache_dir: data/cache
+
+suppliers:
+  - id: supplier_1
+    name: "4tochki"
+    active: true
+    tires_url: "https://b2b.4tochki.ru/export_data/M33449.xml"
+    wheels_url: "https://b2b.4tochki.ru/export_data/M33448.xml"
+    adapter: supplier_1
+  - id: supplier_2
+    name: "svrauto"
+    active: true
+    tires_url:  "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
+    wheels_url: "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
+    adapter: supplier_2
+#  - id: supplier_3
+#    name: "Поставщик 3"
+#    active: true
+#    tires_url: "https://example.com/supplier3/tires.xml"
+#    wheels_url: "https://example.com/supplier3/wheels.xml"
+#    adapter: supplier_3
+#  - id: supplier_4
+#    name: "Поставщик 4"
+#    active: true
+#    tires_url: "https://example.com/supplier4/tires.xml"
+#    wheels_url: "https://example.com/supplier4/wheels.xml"
+#    adapter: supplier_4

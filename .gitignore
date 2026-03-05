@@ -1,0 +1,6 @@
+/.idea
+/.cursor
+/src/__pycache__
+/src/adapters/__pycache__
+/data/cache
+/api/__pycache__

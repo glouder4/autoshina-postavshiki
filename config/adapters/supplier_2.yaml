@@ -1,0 +1,44 @@
+# svrauto: шины и диски в одном XML (COMMODITIES NAME=TYRE / DISK)
+# XPath фильтрует по родительской секции
+supplier_id: "supplier_2"
+supplier_name: "svrauto"
+item_xpath_tires: "//COMMODITIES[@NAME='TYRE']/COMMODITY"
+item_xpath_wheels: "//COMMODITIES[@NAME='DISK']/COMMODITY"
+
+tires:
+  field_mapping:
+    SHIRINA_PROFILYA: "SWIDTH"
+    VYSOTA_PROFILYA: "SHEIGHT"
+    POSADOCHNYY_DIAMETR: "SDIAMETR"
+    PROIZVODITEL: "SMARKA"
+    SEZONNOST: "SSEASON"
+    SHIPY: "STHORNING"
+    MORE_PHOTO: "SPICTURE"
+    INDEKS_NAGRUZKI: "SLOAD"
+    INDEKS_SKOROSTI: "SSPEED"
+    CML2_ARTICLE: "SMNFCODE|NNOMMODIF"
+    MODEL_AVTOSHINY: "SMODEL"
+    HOMOLOGATION: "SHOMOLOGATION"
+    OS_SUPPLIER_TEXT: "supplier"
+    price: "NPRICE_PREPAYMENT"
+    quantity: "NREST"
+  value_transforms: {}
+
+wheels:
+  field_mapping:
+    SHIRINA_DISKA: "SWIDTH"
+    POSADOCHNYY_DIAMETR_DISKA: "SDIAMETR"
+    COUNT_OTVERSTIY: "SHOLESQUANT"
+    MEZHBOLTOVOE_RASSTOYANIE: "SPCD"
+    VYLET_DISKA: "SWHEELOFFSET"
+    DIAMETR_STUPITSY: "SDIA"
+    MORE_PHOTO: "SPICTURE"
+    CML2_ARTICLE: "SMNFCODE|NNOMMODIF"
+    WHEEL_TYPE: "STYPE"
+    MODEL_DISKA: "SMODEL"
+    OS_SUPPLIER_TEXT: "supplier"
+    PROIZVODITEL: "SMARKA"
+    DISK_COLOR: "SCOLOR"
+    price: "NPRICE_PREPAYMENT"
+    quantity: "NREST"
+  value_transforms: {}

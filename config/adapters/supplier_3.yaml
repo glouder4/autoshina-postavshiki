@@ -1,0 +1,42 @@
+supplier_id: "supplier_3"
+supplier_name: "Поставщик 3"
+item_xpath_tires: "//offer"
+item_xpath_wheels: "//offer"
+
+tires:
+  field_mapping:
+    SHIRINA_PROFILYA: "width"
+    VYSOTA_PROFILYA: "height"
+    POSADOCHNYY_DIAMETR: "diameter"
+    PROIZVODITEL: "manufacturer"
+    SEZONNOST: "season"
+    SHIPY: "studs"
+    MORE_PHOTO: "photos"
+    INDEKS_NAGRUZKI: "load_index"
+    INDEKS_SKOROSTI: "speed_index"
+    CML2_ARTICLE: "article"
+    MODEL_AVTOSHINY: "model"
+    HOMOLOGATION: "homologation"
+    OS_SUPPLIER_TEXT: "supplier"
+    price: "cost"
+    quantity: "stock"
+  value_transforms: {}
+
+wheels:
+  field_mapping:
+    SHIRINA_DISKA: "width"
+    POSADOCHNYY_DIAMETR_DISKA: "diameter"
+    COUNT_OTVERSTIY: "holes"
+    MEZHBOLTOVOE_RASSTOYANIE: "pcd"
+    VYLET_DISKA: "et"
+    DIAMETR_STUPITSY: "dia"
+    MORE_PHOTO: "photos"
+    CML2_ARTICLE: "article"
+    WHEEL_TYPE: "type"
+    MODEL_DISKA: "model"
+    OS_SUPPLIER_TEXT: "supplier"
+    PROIZVODITEL: "manufacturer"
+    DISK_COLOR: "color"
+    price: "price_rub"
+    quantity: "qty"
+  value_transforms: {}
