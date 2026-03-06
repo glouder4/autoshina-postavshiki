@@ -10,6 +10,7 @@ item_xpath_wheels: "//disk"
 
 tires:
   field_mapping:
+    NAME: "name"
     SHIRINA_PROFILYA: "width"
     VYSOTA_PROFILYA: "height"
     POSADOCHNYY_DIAMETR: "diametr"
@@ -45,6 +46,7 @@ tires:
 
 wheels:
   field_mapping:
+    NAME: "name"
     SHIRINA_DISKA: "width"
     POSADOCHNYY_DIAMETR_DISKA: "diametr"
     COUNT_OTVERSTIY: "bolts_count"

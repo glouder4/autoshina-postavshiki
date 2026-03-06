@@ -12,21 +12,21 @@ suppliers:
     tires_url: "https://b2b.4tochki.ru/export_data/M33449.xml"
     wheels_url: "https://b2b.4tochki.ru/export_data/M33448.xml"
     adapter: supplier_1
-  - id: supplier_2
-    name: "svrauto"
-    active: true
-    tires_url:  "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
-    wheels_url: "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
-    adapter: supplier_2
-  - id: supplier_3
-    name: "shinservice"
-    active: true
-    tires_url: "https://duplo-api.shinservice.ru/api/v1/data-export/download/5378901f014de4824a4263835d03ec91.xml"
-    wheels_url: "https://duplo-api.shinservice.ru/api/v1/data-export/download/d7f08f963a6e4f41af4f328364048a28.xml"
-    adapter: supplier_3
-  - id: supplier_4
-    name: "terminal"
-    active: true
-    tires_url: "https://terminal.yst.ru/api/xml/tyre/3865771e-dd93-49e3-b210-eb6a4d0981a6"
-    wheels_url: "https://terminal.yst.ru/api/xml/disk/xml/3865771e-dd93-49e3-b210-eb6a4d0981a6"
-    adapter: supplier_4
+#  - id: supplier_2
+#    name: "svrauto"
+#    active: true
+#    tires_url:  "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
+#    wheels_url: "https://webmim.svrauto.ru/api/v1/catalog/unload?access-token=V-oJVTNS0koQH7vl_6_6JiYJhLOjJ6LJ&format=xml&types=1%3B2"
+#    adapter: supplier_2
+#  - id: supplier_3
+#    name: "shinservice"
+#    active: true
+#    tires_url: "https://duplo-api.shinservice.ru/api/v1/data-export/download/5378901f014de4824a4263835d03ec91.xml"
+#    wheels_url: "https://duplo-api.shinservice.ru/api/v1/data-export/download/d7f08f963a6e4f41af4f328364048a28.xml"
+#    adapter: supplier_3
+#  - id: supplier_4
+#    name: "terminal"
+#    active: true
+#    tires_url: "https://terminal.yst.ru/api/xml/tyre/3865771e-dd93-49e3-b210-eb6a4d0981a6"
+#    wheels_url: "https://terminal.yst.ru/api/xml/disk/xml/3865771e-dd93-49e3-b210-eb6a4d0981a6"
+#    adapter: supplier_4

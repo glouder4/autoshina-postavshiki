@@ -18,6 +18,7 @@ class Product:
     quantity: int
 
     # Общие
+    NAME: str = ""  # Название товара (от поставщика или сформированное)
     CML2_ARTICLE: str = ""
     OS_ARTICLE_ID: str = ""  # наш ID: os_article_{supplier_id}_{article}
     MORE_PHOTO: str = ""
@@ -57,6 +58,7 @@ class Product:
             "category": self.category,
             "price": self.price,
             "quantity": self.quantity,
+            "NAME": self.NAME,
             "CML2_ARTICLE": self.CML2_ARTICLE,
             "OS_ARTICLE_ID": self.OS_ARTICLE_ID,
             "MORE_PHOTO": self.MORE_PHOTO,
@@ -104,6 +106,7 @@ class Product:
             category=d["category"],
             price=float(d["price"]),
             quantity=int(d["quantity"]),
+            NAME=d.get("NAME", ""),
             CML2_ARTICLE=d.get("CML2_ARTICLE", ""),
             OS_ARTICLE_ID=d.get("OS_ARTICLE_ID", ""),
             MORE_PHOTO=d.get("MORE_PHOTO", ""),

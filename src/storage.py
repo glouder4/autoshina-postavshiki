@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS products (
     supplier_id TEXT NOT NULL,
     supplier TEXT NOT NULL,
     OS_ARTICLE_ID TEXT DEFAULT '',
+    NAME TEXT DEFAULT '',
     category TEXT NOT NULL,
     price REAL NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 0,
@@ -94,6 +95,12 @@ class Storage:
             except sqlite3.OperationalError:
                 conn.execute(
                     "ALTER TABLE products ADD COLUMN OS_ARTICLE_ID TEXT DEFAULT ''"
+                )
+            try:
+                conn.execute("SELECT NAME FROM products LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute(
+                    "ALTER TABLE products ADD COLUMN NAME TEXT DEFAULT ''"
                 )
 
     def upsert_products(

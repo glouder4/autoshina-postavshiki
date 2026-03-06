@@ -12,7 +12,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.export import generate_export_xml
-from src.storage import Storage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

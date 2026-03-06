@@ -2,33 +2,37 @@
 Генерация объединённого XML из товаров после дедупликации.
 Конвертация значений поставщиков под наши требования при экспорте.
 """
+import re
 from pathlib import Path
 from typing import Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from .config import load_suppliers_config
 from .deduplicator import deduplicate
 from .models import Product
 from .storage import Storage
-from .sync import load_suppliers_config
 
 # Конвертация значений при экспорте (шины)
 EXPORT_TRANSFORMS_TIRES: dict[str, dict[str, str]] = {
+    # SEZONNOST: различные входящие значения → Летняя / Зимняя / Всесезонная
     "SEZONNOST": {
-        "Летняя": "summer",
-        "Зимняя": "winter",
-        "Всесезонная": "allseason",
+        "Летняя": "Летняя", "summer": "Летняя", "s": "Летняя",
+        "Зимняя": "Зимняя", "winter": "Зимняя", "w": "Зимняя",
+        "Всесезонная": "Всесезонная", "allseason": "Всесезонная", "all": "Всесезонная", "u": "Всесезонная", "a": "Всесезонная",
+        "Грузовые": "Грузовые", "cargo": "Грузовые",
     },
-    # SHIPY: поиск без учёта регистра
+    # SHIPY: поиск без учёта регистра → Шипованные / Нешипованные
     "SHIPY": {
-        "0": "no_ship", "1": "ship",
-        "да": "ship", "нет": "no_ship",
-        "шип": "ship", "нешип": "no_ship",
-        "шипы": "ship", "шипованная": "ship", "шипованные": "ship",
-        "нешипованная": "no_ship", "нешипованные": "no_ship",
-        "без шипов": "no_ship", "без шипа": "no_ship",
-        "yes": "ship", "no": "no_ship",
-        "_": "no_ship",
-        "ш.": "ship", "ш": "ship",
+        "0": "Нешипованные", "1": "Шипованные",
+        "да": "Шипованные", "нет": "Нешипованные",
+        "шип": "Шипованные", "нешип": "Нешипованные",
+        "шипы": "Шипованные", "шипованная": "Шипованные", "шипованные": "Шипованные",
+        "нешипованная": "Нешипованные", "нешипованные": "Нешипованные",
+        "без шипов": "Нешипованные", "без шипа": "Нешипованные",
+        "yes": "Шипованные", "no": "Нешипованные",
+        "ship": "Шипованные", "no_ship": "Нешипованные",
+        "_": "Нешипованные",
+        "ш.": "Шипованные", "ш": "Шипованные",
     },
 }
 
@@ -46,8 +50,55 @@ def _transform_export_value(field: str, value: str, category: str) -> str:
     return mapping.get(lookup, value)
 
 
+def _build_product_name(p: Product) -> str:
+    """Собрать название товара из полей."""
+    parts = []
+    if p.category == "tires":
+        if p.PROIZVODITEL:
+            parts.append(p.PROIZVODITEL)
+        if p.MODEL_AVTOSHINY:
+            parts.append(p.MODEL_AVTOSHINY)
+        w, h, d = p.SHIRINA_PROFILYA, p.VYSOTA_PROFILYA, str(p.POSADOCHNYY_DIAMETR).strip()
+        if w and h:
+            dim = f"{w}/{h}"
+            if d:
+                dim += f"R{d}" if not d.upper().startswith("R") else d
+            parts.append(dim)
+        elif w:
+            parts.append(w)
+        elif d:
+            parts.append(f"R{d}" if not d.upper().startswith("R") else d)
+        if p.INDEKS_NAGRUZKI or p.INDEKS_SKOROSTI:
+            parts.append(f"{p.INDEKS_NAGRUZKI or ''}{p.INDEKS_SKOROSTI or ''}".strip())
+    else:
+        if p.PROIZVODITEL:
+            parts.append(p.PROIZVODITEL)
+        if p.MODEL_DISKA:
+            parts.append(p.MODEL_DISKA)
+        if p.SHIRINA_DISKA and p.POSADOCHNYY_DIAMETR_DISKA:
+            parts.append(f"{p.SHIRINA_DISKA}x{p.POSADOCHNYY_DIAMETR_DISKA}")
+        elif p.SHIRINA_DISKA:
+            parts.append(p.SHIRINA_DISKA)
+        elif p.POSADOCHNYY_DIAMETR_DISKA:
+            parts.append(p.POSADOCHNYY_DIAMETR_DISKA)
+        if p.COUNT_OTVERSTIY and p.MEZHBOLTOVOE_RASSTOYANIE:
+            parts.append(f"{p.COUNT_OTVERSTIY}x{p.MEZHBOLTOVOE_RASSTOYANIE}")
+    return " ".join(p.strip() for p in parts if p and str(p).strip())
+
+
+def _first_photo_url(more_photo: str) -> str:
+    """Извлечь первую ссылку из MORE_PHOTO (разделители: запятая, пробел, перевод строки)."""
+    if not more_photo or not more_photo.strip():
+        return ""
+    for part in re.split(r"[\s,;\n]+", more_photo.strip()):
+        s = part.strip()
+        if s and (s.startswith("http://") or s.startswith("https://")):
+            return s
+    return more_photo.strip()
+
+
 def _product_to_xml(parent: Element, p: Product) -> None:
-    """Добавить товар как дочерний элемент. Свойства — в тегах param."""
+    """Добавить товар. Свойства — как отдельные дочерние элементы (плагины/предпросмотр лучше их видят)."""
     item = SubElement(parent, "product")
     item.set("category", p.category)
     if p.OS_ARTICLE_ID:
@@ -55,15 +106,22 @@ def _product_to_xml(parent: Element, p: Product) -> None:
     SubElement(item, "supplier").text = p.OS_SUPPLIER_TEXT or p.supplier
     SubElement(item, "price").text = str(p.price)
     SubElement(item, "quantity").text = str(p.quantity)
+    if p.PROIZVODITEL:
+        SubElement(item, "brand").text = p.PROIZVODITEL.strip()
+    name_val = (p.NAME or "").strip() or _build_product_name(p)
+    if name_val:
+        SubElement(item, "name").text = name_val
+    picture = _first_photo_url(p.MORE_PHOTO)
+    if picture:
+        SubElement(item, "picture").text = picture
 
-    def add_param(name: str) -> None:
+    def add_field(name: str) -> None:
         val = getattr(p, name, "")
         if val:
             val_str = str(val).strip()
             val_str = _transform_export_value(name, val_str, p.category)
-            param = SubElement(item, "param")
-            param.set("name", name)
-            param.text = val_str
+            child = SubElement(item, name)
+            child.text = val_str
 
     if p.category == "tires":
         for attr in [
@@ -72,7 +130,7 @@ def _product_to_xml(parent: Element, p: Product) -> None:
             "INDEKS_NAGRUZKI", "INDEKS_SKOROSTI", "CML2_ARTICLE",
             "MODEL_AVTOSHINY", "HOMOLOGATION",
         ]:
-            add_param(attr)
+            add_field(attr)
     else:
         for attr in [
             "SHIRINA_DISKA", "POSADOCHNYY_DIAMETR_DISKA", "COUNT_OTVERSTIY",
@@ -80,7 +138,7 @@ def _product_to_xml(parent: Element, p: Product) -> None:
             "MORE_PHOTO", "CML2_ARTICLE", "WHEEL_TYPE", "MODEL_DISKA",
             "PROIZVODITEL", "DISK_COLOR",
         ]:
-            add_param(attr)
+            add_field(attr)
 
 
 def build_export_xml(
@@ -89,7 +147,6 @@ def build_export_xml(
 ) -> bytes:
     """Собрать XML из списка товаров. category_filter: только tires или wheels."""
     root = Element("catalog")
-    root.set("xmlns", "http://autoshina-postavshiki/export/1.0")
 
     if category_filter and category_filter != "tires":
         tires = None
