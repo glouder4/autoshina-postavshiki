@@ -19,6 +19,24 @@ from tenacity import (
 from .adapters import get_adapter
 from .models import Product
 
+
+def _product_has_required_fields(p: Product) -> bool:
+    """Обязательные поля при импорте: Название, Картинка, Цена > 0."""
+    if not p or p.price <= 0:
+        return False
+    name_ok = bool((p.NAME or "").strip())
+    if not name_ok:
+        name_ok = bool(
+            (p.PROIZVODITEL or "").strip()
+            or (p.MODEL_AVTOSHINY or "").strip()
+            or (p.MODEL_DISKA or "").strip()
+        )
+    if not name_ok:
+        return False
+    photo = (p.MORE_PHOTO or "").strip()
+    photo_ok = "http://" in photo or "https://" in photo
+    return photo_ok
+
 logger = logging.getLogger(__name__)
 
 # Временные ошибки для retry
@@ -152,7 +170,7 @@ def load_products_from_url(
         elif not hasattr(elem, "tag"):
             continue
         p = adapter.parse_product(elem, category)
-        if p:
+        if p and _product_has_required_fields(p):
             products.append(p)
 
     logger.info(

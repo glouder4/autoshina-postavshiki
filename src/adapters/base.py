@@ -1,10 +1,22 @@
 """
 Базовый адаптер для преобразования XML поставщика в единую модель Product.
 """
+import re
 import logging
 from typing import Any, Optional
 
 from lxml import etree
+
+# Опечатка «—» (em dash) в полях с положительными числами. —10 → 10
+LEADING_DASH_CLEAN_RE = re.compile(r"^[—–−\-]+(.*)$")
+
+# Поля, где ожидается положительное число — убираем ошибочный минус в начале
+NUMERIC_FIELDS = frozenset({
+    "SHIRINA_PROFILYA", "VYSOTA_PROFILYA", "POSADOCHNYY_DIAMETR",
+    "INDEKS_NAGRUZKI", "INDEKS_SKOROSTI",
+    "SHIRINA_DISKA", "POSADOCHNYY_DIAMETR_DISKA",
+    "COUNT_OTVERSTIY", "MEZHBOLTOVOE_RASSTOYANIE", "VYLET_DISKA", "DIAMETR_STUPITSY",
+})
 
 from ..models import Product
 
@@ -51,6 +63,10 @@ class BaseAdapter:
 
     def _apply_transform(self, field: str, value: str) -> str:
         """Применить value_transforms если есть."""
+        if field in NUMERIC_FIELDS:
+            m = LEADING_DASH_CLEAN_RE.match(value.strip())
+            if m:
+                value = m.group(1).strip() or value
         transforms = self.value_transforms.get(field)
         if transforms and value in transforms:
             return transforms[value]

@@ -87,14 +87,11 @@ def _build_product_name(p: Product) -> str:
 
 
 def _first_photo_url(more_photo: str) -> str:
-    """Извлечь первую ссылку из MORE_PHOTO (разделители: запятая, пробел, перевод строки)."""
+    """Извлечь первую полную ссылку из MORE_PHOTO. URL может содержать запятые в пути."""
     if not more_photo or not more_photo.strip():
         return ""
-    for part in re.split(r"[\s,;\n]+", more_photo.strip()):
-        s = part.strip()
-        if s and (s.startswith("http://") or s.startswith("https://")):
-            return s
-    return more_photo.strip()
+    m = re.search(r"https?://[^\s]+", more_photo.strip())
+    return m.group(0) if m else more_photo.strip()
 
 
 def _product_to_xml(parent: Element, p: Product) -> None:
@@ -176,11 +173,12 @@ def get_export_products(
 ) -> list[Product]:
     """Получить товары для выгрузки (после дедупликации, cheapest available)."""
     products = storage.get_all_products(active_suppliers=active_suppliers)
-    return deduplicate(
+    products = deduplicate(
         products,
         active_suppliers=active_suppliers,
         require_stock=require_stock,
     )
+    return [p for p in products if p.price > 0 and p.quantity > 0]
 
 
 def generate_export_xml(
