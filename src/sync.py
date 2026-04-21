@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .config import load_suppliers_config
 from .config_validate import ConfigValidationError, validate_suppliers_config
+from .export import compute_export_dedup_stats
 from .loader import LoadOutcome, LoadResult, load_products_from_url
 from .storage import Storage
 from .sync_state import SyncState, default_sync_state_path, save_sync_state
@@ -68,7 +69,7 @@ def run_sync(
     if not cache_dir.is_absolute():
         cache_dir = project_root / cache_dir
 
-    storage = Storage(db_path or "data/products.db")
+    storage: Optional[Storage] = None
     active_ids: list[str] = []
     state.had_category_load_errors = False
 
@@ -82,6 +83,7 @@ def run_sync(
     )
 
     try:
+        storage = Storage(db_path or "data/products.db")
         for s in suppliers:
             sid = s.get("id", "")
             name = s.get("name", sid)
@@ -169,7 +171,59 @@ def run_sync(
         logger.exception("Синхронизация прервана: %s", e)
         raise
     finally:
+        if storage is not None:
+            try:
+                dedup = compute_export_dedup_stats(
+                    storage,
+                    active_supplier_ids=active_ids,
+                    require_stock=True,
+                )
+                state.export_stats = {
+                    "ingestion_totals": _aggregate_successful_category_loads(state),
+                    "deduplication": dedup,
+                    "note_ru": (
+                        "ingestion_totals — сумма по категориям с outcome success (сырой поток загрузки); "
+                        "deduplication.merged_duplicate_rows — на сколько строк уменьшилось число записей после "
+                        "deduplicate(require_stock=True): слияние дублей между поставщиками и отсев групп без "
+                        "подходящего остатка; filtered_out в categories — отсев на этапе адаптера."
+                    ),
+                }
+                ing = state.export_stats["ingestion_totals"]
+                logger.info(
+                    "Сводка выгрузки: accepted=%s, сохранено в БД за проход=%s; "
+                    "строк в БД до дедупа=%s, после дедупа=%s, минус строк после дедупликатора=%s; "
+                    "после фильтра цена>0 и остаток>0=%s",
+                    ing.get("accepted"),
+                    ing.get("products_saved_to_db"),
+                    dedup["before_deduplicate_rows"]["total"],
+                    dedup["after_deduplicate_rows"]["total"],
+                    dedup["merged_duplicate_rows"]["total"],
+                    dedup["after_price_quantity_filter_rows"]["total"],
+                )
+            except Exception as ex:
+                logger.warning("Не удалось посчитать export_stats: %s", ex)
+        state.active_supplier_ids = list(active_ids)
         save_sync_state(state, sync_state_path)
+
+
+def _aggregate_successful_category_loads(state: SyncState) -> dict[str, Any]:
+    raw = acc = filt = saved = 0
+    n_ok = 0
+    for entry in state.categories.values():
+        if entry.get("outcome") != LoadOutcome.SUCCESS.value:
+            continue
+        n_ok += 1
+        raw += int(entry.get("raw_items") or 0)
+        acc += int(entry.get("accepted") or 0)
+        filt += int(entry.get("filtered_out") or 0)
+        saved += int(entry.get("products_saved") or 0)
+    return {
+        "success_category_loads": n_ok,
+        "raw_items": raw,
+        "accepted": acc,
+        "filtered_out": filt,
+        "products_saved_to_db": saved,
+    }
 
 
 def _record_load_result(state: SyncState, ck: str, result: LoadResult) -> None:

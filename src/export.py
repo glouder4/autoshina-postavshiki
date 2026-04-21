@@ -5,7 +5,7 @@
 import math
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from .config import load_suppliers_config
@@ -186,6 +186,59 @@ def get_export_products(
         require_stock=require_stock,
     )
     return [p for p in products if p.price > 0 and p.quantity > 0]
+
+
+def compute_export_dedup_stats(
+    storage: Storage,
+    active_supplier_ids: Optional[list[str]] = None,
+    require_stock: bool = True,
+) -> dict[str, Any]:
+    """
+    Счётчики до/после дедупликации (та же цепочка, что у get_export_products).
+    merged_duplicate_rows = before − after дедупликатора: слияние дублей и пропуск групп
+    без валидного кандидата при require_stock; не смешивать с filtered_out на загрузке.
+    """
+    all_p = storage.get_all_products(active_supplier_ids=active_supplier_ids)
+
+    def _count_cat(products: list[Product], cat: str) -> int:
+        return sum(1 for p in products if p.category == cat)
+
+    before = {
+        "tires": _count_cat(all_p, "tires"),
+        "wheels": _count_cat(all_p, "wheels"),
+    }
+    before["total"] = before["tires"] + before["wheels"]
+
+    deduped = deduplicate(
+        all_p,
+        active_supplier_ids=active_supplier_ids,
+        require_stock=require_stock,
+    )
+    after_dedup = {
+        "tires": _count_cat(deduped, "tires"),
+        "wheels": _count_cat(deduped, "wheels"),
+    }
+    after_dedup["total"] = after_dedup["tires"] + after_dedup["wheels"]
+
+    merged = {
+        "tires": before["tires"] - after_dedup["tires"],
+        "wheels": before["wheels"] - after_dedup["wheels"],
+        "total": before["total"] - after_dedup["total"],
+    }
+
+    kept_price_qty = [p for p in deduped if p.price > 0 and p.quantity > 0]
+    after_filter = {
+        "tires": _count_cat(kept_price_qty, "tires"),
+        "wheels": _count_cat(kept_price_qty, "wheels"),
+    }
+    after_filter["total"] = after_filter["tires"] + after_filter["wheels"]
+
+    return {
+        "before_deduplicate_rows": before,
+        "after_deduplicate_rows": after_dedup,
+        "merged_duplicate_rows": merged,
+        "after_price_quantity_filter_rows": after_filter,
+    }
 
 
 def generate_export_xml(

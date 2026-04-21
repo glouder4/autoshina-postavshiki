@@ -13,6 +13,7 @@ def test_save_load_roundtrip(tmp_path):
         sync_finished_ok=True,
         had_category_load_errors=False,
         categories={"supplier_1|tires": {"outcome": "success", "products_saved": 3}},
+        active_supplier_ids=["supplier_1", "supplier_2"],
     )
     st.updated_at = "2026-01-01T00:00:00+00:00"
     save_sync_state(st, p)
@@ -22,6 +23,7 @@ def test_save_load_roundtrip(tmp_path):
     assert loaded.sync_finished_ok is True
     assert loaded.had_category_load_errors is False
     assert loaded.categories["supplier_1|tires"]["outcome"] == "success"
+    assert loaded.active_supplier_ids == ["supplier_1", "supplier_2"]
 
 
 def test_save_sets_updated_at_when_empty(tmp_path):

@@ -1,4 +1,4 @@
-# shinservice: tires и wheels — отдельные файлы, атрибуты на элементе
+# shinservice (Duplo): шины и диски — обычно два XML; второй URL задаётся как wheels_url в suppliers.yaml.
 # tire: width, profile, diam, brand, model, season, pin, load, speed, sku, photo, price, stock
 # wheel: diameter (16/6.5J), pn, pcd, et, centerbore, type, color, sku, photo, price, stock
 supplier_id: "supplier_3"
