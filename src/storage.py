@@ -1,6 +1,7 @@
 """
 Хранение товаров в SQLite.
 """
+import hashlib
 import logging
 import sqlite3
 from pathlib import Path
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS products (
     MORE_PHOTO TEXT DEFAULT '',
     PROIZVODITEL TEXT DEFAULT '',
     OS_SUPPLIER_TEXT TEXT DEFAULT '',
+    PRICE_ROZN REAL DEFAULT 0,
     -- Шины
     SHIRINA_PROFILYA TEXT DEFAULT '',
     VYSOTA_PROFILYA TEXT DEFAULT '',
@@ -49,8 +51,10 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_products_supplier_article ON products(supplier_id, CML2_ARTICLE);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_supplier_cat_article ON products(supplier_id, category, CML2_ARTICLE);
 """
+
+SURROGATE_ARTICLE_PREFIX = "___det_"
 
 
 class Storage:
@@ -90,6 +94,12 @@ class Storage:
                 )
             except sqlite3.OperationalError:
                 pass
+            conn.execute("DROP INDEX IF EXISTS idx_products_supplier_article")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_products_supplier_cat_article "
+                "ON products(supplier_id, category, CML2_ARTICLE)"
+            )
             try:
                 conn.execute("SELECT OS_ARTICLE_ID FROM products LIMIT 1")
             except sqlite3.OperationalError:
@@ -102,65 +112,109 @@ class Storage:
                 conn.execute(
                     "ALTER TABLE products ADD COLUMN NAME TEXT DEFAULT ''"
                 )
+            try:
+                conn.execute("SELECT PRICE_ROZN FROM products LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute(
+                    "ALTER TABLE products ADD COLUMN PRICE_ROZN REAL DEFAULT 0"
+                )
+
+    def stable_surrogate_article(self, product: Product) -> str:
+        """
+        Детерминированный surrogate-артикул для позиций без CML2_ARTICLE.
+        Не включает price/quantity, чтобы ключ был стабилен между синками.
+        """
+        parts = [
+            product.supplier_id,
+            product.category,
+            product.PROIZVODITEL,
+            product.MODEL_AVTOSHINY,
+            product.MODEL_DISKA,
+            product.SHIRINA_PROFILYA,
+            product.VYSOTA_PROFILYA,
+            product.POSADOCHNYY_DIAMETR,
+            product.SEZONNOST,
+            product.SHIPY,
+            product.INDEKS_NAGRUZKI,
+            product.INDEKS_SKOROSTI,
+            product.HOMOLOGATION,
+            product.SHIRINA_DISKA,
+            product.POSADOCHNYY_DIAMETR_DISKA,
+            product.COUNT_OTVERSTIY,
+            product.MEZHBOLTOVOE_RASSTOYANIE,
+            product.VYLET_DISKA,
+            product.DIAMETR_STUPITSY,
+            product.WHEEL_TYPE,
+            product.DISK_COLOR,
+        ]
+        payload = "|".join(str(part or "").strip().lower() for part in parts)
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return f"{SURROGATE_ARTICLE_PREFIX}{digest[:16]}"
 
     def upsert_products(
-        self, products: list[Product], supplier: str, supplier_id: str
+        self,
+        products: list[Product],
+        supplier: str,
+        supplier_id: str,
+        category: str,
     ) -> None:
         """
-        Обновить товары поставщика по (supplier_id, CML2_ARTICLE).
+        Обновить товары поставщика по (supplier_id, category, CML2_ARTICLE).
         Артикулы разных поставщиков могут совпадать — это разные товары, храним оба.
-        OS_ARTICLE_ID = os_article_{id} — значение поля id в нашей системе.
+        OS_ARTICLE_ID = os_article_{supplier_id}_{article} — стабильный ID для 1С.
+        Удаляются товары, которых больше нет в выгрузке поставщика в рамках категории.
         """
         if not products:
             return
-        import uuid
+        normalized_rows: list[tuple[dict, str]] = []
+        new_articles: set[str] = set()
 
-        new_articles = set()
         for p in products:
-            a = p.CML2_ARTICLE
-            if not a:
-                a = f"___{uuid.uuid4().hex[:8]}"
-            new_articles.add(a)
+            if p.category != category:
+                raise ValueError(
+                    f"upsert_products expects category={category}, got {p.category}"
+                )
+            d = p.to_dict()
+            article = (p.CML2_ARTICLE or "").strip() or self.stable_surrogate_article(p)
+            d["CML2_ARTICLE"] = article
+            d["supplier"] = supplier
+            d["supplier_id"] = supplier_id
+            d["category"] = category
+            d.pop("id", None)
+            d["OS_ARTICLE_ID"] = f"os_article_{supplier_id}_{article}"
+            normalized_rows.append((d, article))
+            new_articles.add(article)
 
         with self._get_conn() as conn:
             placeholders = ", ".join("?" * len(new_articles))
             conn.execute(
-                "DELETE FROM products WHERE supplier_id = ? AND CML2_ARTICLE NOT IN ("
+                "DELETE FROM products WHERE supplier_id = ? AND category = ? "
+                "AND CML2_ARTICLE NOT IN ("
                 + placeholders
                 + ")",
-                [supplier_id] + list(new_articles),
+                [supplier_id, category] + list(new_articles),
             )
-            for p in products:
-                d = p.to_dict()
-                article = p.CML2_ARTICLE
-                if not article:
-                    article = f"___{uuid.uuid4().hex[:8]}"
-                    d["CML2_ARTICLE"] = article
-                d.pop("OS_ARTICLE_ID", None)
-                d.pop("id", None)
+            for d, _article in normalized_rows:
                 cols = ", ".join(d.keys())
                 ph = ", ".join("?" * len(d))
                 conn.execute(
                     f"INSERT OR REPLACE INTO products ({cols}) VALUES ({ph})",
                     list(d.values()),
                 )
-                rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-                conn.execute(
-                    "UPDATE products SET OS_ARTICLE_ID = ? WHERE id = ?",
-                    (f"os_article_{rid}", rid),
-                )
 
     def get_all_products(
-        self, active_suppliers: Optional[list[str]] = None
+        self, active_supplier_ids: Optional[list[str]] = None
     ) -> list[Product]:
-        """Получить все товары. Если active_suppliers задан — только от этих поставщиков."""
+        """Получить все товары. Если active_supplier_ids задан — только от этих поставщиков."""
         with self._get_conn() as conn:
             conn.row_factory = sqlite3.Row
-            if active_suppliers:
-                placeholders = ", ".join("?" * len(active_suppliers))
+            if active_supplier_ids is not None:
+                if not active_supplier_ids:
+                    return []
+                placeholders = ", ".join("?" * len(active_supplier_ids))
                 rows = conn.execute(
-                    f"SELECT * FROM products WHERE supplier IN ({placeholders})",
-                    active_suppliers,
+                    f"SELECT * FROM products WHERE supplier_id IN ({placeholders})",
+                    active_supplier_ids,
                 ).fetchall()
             else:
                 rows = conn.execute("SELECT * FROM products").fetchall()

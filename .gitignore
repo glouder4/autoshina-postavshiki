@@ -5,3 +5,5 @@
 /data/cache
 /api/__pycache__
 /data/products.db
+/__pycache__
+/tests/__pycache__

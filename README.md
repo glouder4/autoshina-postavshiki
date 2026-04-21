@@ -6,7 +6,8 @@
 - Адаптеры для нормализации формата каждого поставщика
 - Дедупликация по характеристикам и названию
 - Выбор cheapest available при дублях
-- REST API: GET /export/tires.xml, GET /export/wheels.xml
+- REST API: GET /export/tires.xml, GET /export/wheels.xml, GET /health, GET /ready
+- Валидация `config/suppliers.yaml` и адаптеров до синхронизации; при успехе/ошибке пишется `data/sync_state.json`
 - Флаг активности поставщика (active: false — не обрабатываем)
 - Обработка сетевых ошибок, retry, изоляция сбоев
 - Кэш: XML сначала скачивается в `data/cache/`, затем парсится (подходит для больших выгрузок)
@@ -35,7 +36,10 @@ API будет доступен на http://localhost:8000
 
 - `GET /export/tires.xml` — выгрузка шин
 - `GET /export/wheels.xml` — выгрузка дисков
-- `GET /health` — проверка работы
+- `GET /health` — liveness (процесс жив)
+- `GET /ready` — readiness: валидный конфиг и последняя синхронизация без фатальной ошибки (до первого `run_sync` — 503)
+
+Тесты: из корня репозитория после `pip install -r requirements.txt` выполните `python -m pytest tests/ -v` (полный набор модульных и интеграционных тестов без доступа к сети).
 
 ## Конфигурация
 
@@ -60,6 +64,8 @@ API будет доступен на http://localhost:8000
 │   └── app.py
 ├── data/
 │   ├── cache/          # Кэш загруженных XML (supplier_1_tires.xml и т.д.)
-│   └── products.db     # SQLite БД
+│   ├── products.db     # SQLite БД
+│   └── sync_state.json # последний результат синка (для /ready)
+├── tests/
 └── main.py
 ```

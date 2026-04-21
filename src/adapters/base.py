@@ -34,6 +34,7 @@ class BaseAdapter:
         value_transforms: Optional[dict[str, dict[str, str]]] = None,
         quantity_sum_fields: Optional[list[str]] = None,
         price_min_fields: Optional[list[str]] = None,
+        price_max_rozn_from_quantity: bool = False,
     ):
         self.supplier_id = supplier_id
         self.supplier_name = supplier_name
@@ -41,6 +42,7 @@ class BaseAdapter:
         self.value_transforms = value_transforms or {}
         self.quantity_sum_fields = quantity_sum_fields or []
         self.price_min_fields = price_min_fields or []
+        self.price_max_rozn_from_quantity = price_max_rozn_from_quantity
 
     def _get_text(self, elem, tag: str) -> str:
         """Получить текст дочернего элемента, атрибута или ключа dict. Поддержка fallback: "field1|field2"."""
@@ -106,6 +108,32 @@ class BaseAdapter:
                     pass
         return min(prices) if prices else 0.0
 
+    def _parse_price_max_rozn_with_stock(self, elem) -> float:
+        """Максимум среди _rozn цен, у которых остаток > 0. Пары: rest_X -> price_X_rozn."""
+        if not self.quantity_sum_fields:
+            return 0.0
+        transforms = self.value_transforms.get("quantity", {})
+        prices: list[float] = []
+        for rest_tag in self.quantity_sum_fields:
+            rest_raw = self._get_text(elem, rest_tag)
+            rest_val = transforms.get(rest_raw, rest_raw) if rest_raw else ""
+            try:
+                qty = int(rest_val) if rest_val else 0
+            except ValueError:
+                qty = 0
+            if qty <= 0:
+                continue
+            price_tag = "price_" + rest_tag.replace("rest_", "", 1) + "_rozn"
+            raw = self._get_text(elem, price_tag)
+            if raw:
+                try:
+                    p = float(raw)
+                    if p > 0:
+                        prices.append(p)
+                except ValueError:
+                    pass
+        return max(prices) if prices else 0.0
+
     def _parse_quantity(self, elem) -> int:
         """Суммировать остатки по полям quantity_sum_fields. «более 40» → 40."""
         if not self.quantity_sum_fields:
@@ -141,6 +169,8 @@ class BaseAdapter:
             quantity = self._parse_quantity(elem)
             supplier = data.get("OS_SUPPLIER_TEXT") or self.supplier_name
 
+            price_rozn = self._parse_price_max_rozn_with_stock(elem) if self.price_max_rozn_from_quantity else 0.0
+
             p = Product(
                 supplier_id=self.supplier_id,
                 supplier=supplier,
@@ -149,6 +179,8 @@ class BaseAdapter:
                 quantity=quantity,
                 OS_SUPPLIER_TEXT=supplier,
             )
+            if price_rozn > 0:
+                p.PRICE_ROZN = price_rozn
             for k, v in data.items():
                 if k in ("price", "quantity", "supplier", "OS_SUPPLIER_TEXT"):
                     continue

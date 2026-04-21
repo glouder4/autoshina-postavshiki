@@ -4,6 +4,8 @@ update_interval_minutes: 60
 request_timeout_seconds: 60
 # Папка для кэша загруженных XML (относительно корня проекта)
 cache_dir: data/cache
+# Накрутка на цены при экспорте (процент, 0 = без накрутки). Пример: 7 → +7%
+markup_percent: 7
 
 suppliers:
   - id: supplier_1

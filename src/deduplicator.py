@@ -94,7 +94,8 @@ def select_best_from_group(
     require_stock: bool = True,
 ) -> Optional[Product]:
     """
-    Из группы дублей выбрать один: сортировка по цене, первый с остатком.
+    Из группы дублей выбрать один: самая дешёвая с остатком.
+    В <price> — цена этого товара (минимальная среди доступных).
     Если require_stock и все без остатка — не включать (return None).
     """
     if not products:
@@ -110,15 +111,17 @@ def select_best_from_group(
 
 def deduplicate(
     products: list[Product],
-    active_suppliers: Optional[list[str]] = None,
+    active_supplier_ids: Optional[list[str]] = None,
     require_stock: bool = True,
 ) -> list[Product]:
     """
     Дедупликация: оставить по одному товару из каждой группы дублей.
-    Только товары от active_suppliers. Cheapest available.
+    Только товары от active_supplier_ids. Cheapest available.
     """
-    if active_suppliers:
-        products = [p for p in products if p.supplier in active_suppliers]
+    if active_supplier_ids is not None:
+        if not active_supplier_ids:
+            return []
+        products = [p for p in products if p.supplier_id in active_supplier_ids]
 
     result: list[Product] = []
     for category in ("tires", "wheels"):

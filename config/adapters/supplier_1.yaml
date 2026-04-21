@@ -99,6 +99,7 @@ tires:
     - price_nvkz3_rozn
     - price_mits
     - price_mrts
+  price_max_rozn_from_quantity: true
   quantity_sum_fields:
     - rest_oh_kirill
     - rest_oh_cherkyt
@@ -234,6 +235,7 @@ wheels:
     - price_nvkz3
     - price_mits
     - price_mrts
+  price_max_rozn_from_quantity: true
   quantity_sum_fields:
     - rest_oh_kirill
     - rest_oh_cherkyt

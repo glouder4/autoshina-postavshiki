@@ -2,8 +2,12 @@
 Загрузка XML/JSON по URL с обработкой ошибок, retry, таймаутом.
 Файлы сначала сохраняются в кэш, затем парсятся — экономия памяти на больших выгрузках.
 """
+from __future__ import annotations
+
 import json
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
 
@@ -18,6 +22,34 @@ from tenacity import (
 
 from .adapters import get_adapter
 from .models import Product
+
+logger = logging.getLogger(__name__)
+
+# Для sniff формата читаем только префикс файла (не весь файл в память).
+FORMAT_SNIFF_BYTES = 8192
+
+
+class LoadOutcome(str, Enum):
+    """Исход загрузки категории для синхронизации и наблюдаемости."""
+
+    SUCCESS = "success"  # есть товары для upsert
+    EMPTY = "empty"  # загрузка и парсинг успешны, но в выгрузку нечего писать
+    FETCH_ERROR = "fetch_error"
+    PARSE_ERROR = "parse_error"
+    CONFIG_ERROR = "config_error"
+    PROCESS_ERROR = "process_error"
+
+
+@dataclass
+class LoadResult:
+    """Структурированный результат load_products_from_url."""
+
+    outcome: LoadOutcome
+    products: list[Product] = field(default_factory=list)
+    detail: str = ""
+    raw_items: int = 0
+    accepted: int = 0
+    filtered_out: int = 0
 
 
 def _product_has_required_fields(p: Product) -> bool:
@@ -37,7 +69,6 @@ def _product_has_required_fields(p: Product) -> bool:
     photo_ok = "http://" in photo or "https://" in photo
     return photo_ok
 
-logger = logging.getLogger(__name__)
 
 # Временные ошибки для retry
 RETRY_EXCEPTIONS = (
@@ -90,20 +121,31 @@ def parse_json_from_file(filepath: Path):
         return None
 
 
-def parse_file_by_content(filepath: Path) -> tuple[Optional[Union[etree._Element, list]], str]:
+def _read_sniff_prefix(filepath: Path, max_bytes: int = FORMAT_SNIFF_BYTES) -> str:
+    """Прочитать только начало файла для определения формата (без загрузки всего файла)."""
+    try:
+        with open(filepath, "rb") as f:
+            chunk = f.read(max_bytes)
+        return chunk.decode("utf-8", errors="ignore").lstrip()
+    except OSError as e:
+        logger.error("Ошибка чтения %s: %s", filepath, e)
+        return ""
+
+
+def parse_file_by_content(
+    filepath: Path,
+) -> tuple[Optional[Union[etree._Element, list]], str]:
     """
     Определить формат по содержимому и распарсить.
     Возвращает (root/elements, "xml"|"json") или (None, "") при ошибке.
     """
     try:
-        first_bytes = filepath.read_bytes()[:50]
-        first_chars = first_bytes.decode("utf-8", errors="ignore").lstrip()
+        first_chars = _read_sniff_prefix(filepath)
         if first_chars.startswith("[") or first_chars.startswith("{"):
             data = parse_json_from_file(filepath)
             if data is not None:
                 items = data if isinstance(data, list) else []
                 return (items, "json")
-        # XML
         root = parse_xml_from_file(filepath)
         return (root, "xml") if root is not None else (None, "")
     except Exception as e:
@@ -121,16 +163,19 @@ def load_products_from_url(
     cache_dir: Optional[Path] = None,
     cache_file_override: Optional[Path] = None,
     skip_fetch: bool = False,
-) -> list[Product]:
+) -> LoadResult:
     """
-    Скачать XML по URL в кэш, распарсить через адаптер, вернуть список Product.
+    Скачать XML по URL в кэш, распарсить через адаптер.
     cache_file_override: использовать этот файл вместо supplier_id_category.xml
     skip_fetch: не скачивать, только парсить (для объединённой выгрузки).
     """
     adapter = get_adapter(supplier_id, category, config_dir)
     if not adapter:
         logger.error("Адаптер не найден для %s/%s", supplier_id, category)
-        return []
+        return LoadResult(
+            outcome=LoadOutcome.CONFIG_ERROR,
+            detail=f"нет адаптера для {supplier_id}/{category}",
+        )
 
     cache_base = cache_dir or Path("data/cache")
     cache_file = cache_file_override or (cache_base / f"{supplier_id}_{category}.xml")
@@ -142,14 +187,20 @@ def load_products_from_url(
             logger.error(
                 "Ошибка загрузки %s (поставщик %s): %s", url, supplier_id, e
             )
-            return []
+            return LoadResult(
+                outcome=LoadOutcome.FETCH_ERROR,
+                detail=str(e),
+            )
         except Exception as e:
             logger.exception("Неожиданная ошибка загрузки %s: %s", url, e)
-            return []
+            return LoadResult(outcome=LoadOutcome.FETCH_ERROR, detail=str(e))
 
     parsed, fmt = parse_file_by_content(cache_file)
     if parsed is None:
-        return []
+        return LoadResult(
+            outcome=LoadOutcome.PARSE_ERROR,
+            detail="не удалось распознать или распарсить файл",
+        )
 
     if fmt == "json":
         items = parsed if isinstance(parsed, list) else []
@@ -160,9 +211,15 @@ def load_products_from_url(
             items = parsed.xpath(item_xpath)
         except Exception as e:
             logger.error("Ошибка XPath %s: %s", item_xpath, e)
-            return []
+            return LoadResult(
+                outcome=LoadOutcome.PROCESS_ERROR,
+                detail=f"xpath {item_xpath}: {e}",
+            )
 
+    raw_items = len(items)
     products: list[Product] = []
+    filtered_out = 0
+
     for elem in items:
         if fmt == "json":
             if not isinstance(elem, dict):
@@ -172,14 +229,52 @@ def load_products_from_url(
         p = adapter.parse_product(elem, category)
         if p and _product_has_required_fields(p):
             products.append(p)
+        else:
+            filtered_out += 1
 
-    logger.info(
-        "Загружено %d товаров с %s (%s)",
-        len(products),
-        supplier_id,
-        category,
+    accepted = len(products)
+
+    if products:
+        logger.info(
+            "Загружено %d товаров с %s (%s), из позиций в фиде %d, отфильтровано %d",
+            accepted,
+            supplier_id,
+            category,
+            raw_items,
+            filtered_out,
+        )
+        return LoadResult(
+            outcome=LoadOutcome.SUCCESS,
+            products=products,
+            raw_items=raw_items,
+            accepted=accepted,
+            filtered_out=filtered_out,
+        )
+
+    if raw_items == 0:
+        detail = "в фиде нет элементов по XPath/JSON"
+        logger.info(
+            "Пустая выгрузка %s/%s: %s",
+            supplier_id,
+            category,
+            detail,
+        )
+    else:
+        detail = f"все {raw_items} позиций отфильтрованы (цена/имя/фото)"
+        logger.warning(
+            "Категория %s/%s: %s",
+            supplier_id,
+            category,
+            detail,
+        )
+
+    return LoadResult(
+        outcome=LoadOutcome.EMPTY,
+        detail=detail,
+        raw_items=raw_items,
+        accepted=0,
+        filtered_out=filtered_out,
     )
-    return products
 
 
 def get_adapter_config(

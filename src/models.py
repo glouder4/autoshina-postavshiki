@@ -19,8 +19,9 @@ class Product:
 
     # Общие
     NAME: str = ""  # Название товара (от поставщика или сформированное)
+    PRICE_ROZN: float = 0.0  # Макс. _rozn цена среди позиций с остатком (для экспорта)
     CML2_ARTICLE: str = ""
-    OS_ARTICLE_ID: str = ""  # наш ID: os_article_{supplier_id}_{article}
+    OS_ARTICLE_ID: str = ""  # стабильный ID: os_article_{supplier_id}_{cae}
     MORE_PHOTO: str = ""
     PROIZVODITEL: str = ""
     OS_SUPPLIER_TEXT: str = ""
@@ -64,6 +65,7 @@ class Product:
             "MORE_PHOTO": self.MORE_PHOTO,
             "PROIZVODITEL": self.PROIZVODITEL,
             "OS_SUPPLIER_TEXT": self.OS_SUPPLIER_TEXT,
+            "PRICE_ROZN": self.PRICE_ROZN,
         }
         if self.category == "tires":
             d.update(
@@ -113,6 +115,7 @@ class Product:
             PROIZVODITEL=d.get("PROIZVODITEL", ""),
             OS_SUPPLIER_TEXT=d.get("OS_SUPPLIER_TEXT", ""),
         )
+        p.PRICE_ROZN = float(d.get("PRICE_ROZN", 0) or 0)
         if d.get("id"):
             p.id = int(d["id"])
         if p.category == "tires":

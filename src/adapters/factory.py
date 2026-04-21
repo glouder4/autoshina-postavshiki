@@ -51,6 +51,7 @@ def get_adapter(
     transforms = section.get("value_transforms", {})
     quantity_sum_fields = section.get("quantity_sum_fields")
     price_min_fields = section.get("price_min_fields")
+    price_max_rozn_from_quantity = section.get("price_max_rozn_from_quantity", False)
     return BaseAdapter(
         supplier_id=cfg.get("supplier_id", supplier_id),
         supplier_name=cfg.get("supplier_name", supplier_id),
@@ -58,4 +59,5 @@ def get_adapter(
         value_transforms=transforms,
         quantity_sum_fields=quantity_sum_fields,
         price_min_fields=price_min_fields,
+        price_max_rozn_from_quantity=price_max_rozn_from_quantity,
     )

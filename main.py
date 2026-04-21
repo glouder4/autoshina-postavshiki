@@ -2,12 +2,10 @@
 Точка входа: запуск API и планировщика синхронизации.
 """
 import logging
-import sys
 from pathlib import Path
 
-# Корень проекта
+# Запускайте из корня репозитория: python main.py (чтобы пакет src был доступен).
 PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.sync import run_sync
 from src.scheduler import start_scheduler, stop_scheduler

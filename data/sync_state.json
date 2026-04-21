@@ -1,0 +1,22 @@
+{
+  "updated_at": "2026-04-21T16:12:28+00:00",
+  "config_valid": true,
+  "config_error": "",
+  "sync_finished_ok": true,
+  "sync_error": "",
+  "had_category_load_errors": false,
+  "categories": {
+    "keep|tires": {
+      "outcome": "success",
+      "detail": "",
+      "raw_items": 1,
+      "accepted": 1,
+      "filtered_out": 0,
+      "products_saved": 1
+    },
+    "keep|wheels": {
+      "outcome": "skipped_no_url",
+      "detail": "URL не задан"
+    }
+  }
+}

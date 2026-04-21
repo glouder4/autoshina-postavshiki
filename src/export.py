@@ -2,6 +2,7 @@
 Генерация объединённого XML из товаров после дедупликации.
 Конвертация значений поставщиков под наши требования при экспорте.
 """
+import math
 import re
 from pathlib import Path
 from typing import Optional
@@ -94,18 +95,23 @@ def _first_photo_url(more_photo: str) -> str:
     return m.group(0) if m else more_photo.strip()
 
 
-def _product_to_xml(parent: Element, p: Product) -> None:
+def _product_to_xml(parent: Element, p: Product, markup_percent: float = 0) -> None:
     """Добавить товар. Свойства — как отдельные дочерние элементы (плагины/предпросмотр лучше их видят)."""
     item = SubElement(parent, "product")
     item.set("category", p.category)
     if p.OS_ARTICLE_ID:
         item.set("OS_ARTICLE_ID", p.OS_ARTICLE_ID)
     SubElement(item, "supplier").text = p.OS_SUPPLIER_TEXT or p.supplier
-    SubElement(item, "price").text = str(p.price)
+    raw_price = p.price * (1 + markup_percent / 100) if markup_percent else p.price
+    price_val = math.ceil(float(raw_price))
+    SubElement(item, "price").text = str(price_val)
     SubElement(item, "quantity").text = str(p.quantity)
-    if p.PROIZVODITEL:
-        SubElement(item, "brand").text = p.PROIZVODITEL.strip()
+    brand_val = (p.PROIZVODITEL or "").strip()
+    if brand_val:
+        SubElement(item, "brand").text = brand_val
     name_val = (p.NAME or "").strip() or _build_product_name(p)
+    if name_val and brand_val and not name_val.lower().startswith(brand_val.lower()):
+        name_val = f"{brand_val} {name_val}"
     if name_val:
         SubElement(item, "name").text = name_val
     picture = _first_photo_url(p.MORE_PHOTO)
@@ -141,8 +147,9 @@ def _product_to_xml(parent: Element, p: Product) -> None:
 def build_export_xml(
     products: list[Product],
     category_filter: Optional[str] = None,
+    markup_percent: float = 0,
 ) -> bytes:
-    """Собрать XML из списка товаров. category_filter: только tires или wheels."""
+    """Собрать XML из списка товаров. category_filter: только tires или wheels. markup_percent: накрутка на цены."""
     root = Element("catalog")
 
     if category_filter and category_filter != "tires":
@@ -159,7 +166,7 @@ def build_export_xml(
             continue
         parent = tires if p.category == "tires" else wheels
         if parent is not None:
-            _product_to_xml(parent, p)
+            _product_to_xml(parent, p, markup_percent=markup_percent)
 
     return b'<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(
         root, encoding="unicode", method="xml"
@@ -168,14 +175,14 @@ def build_export_xml(
 
 def get_export_products(
     storage: Storage,
-    active_suppliers: Optional[list[str]] = None,
+    active_supplier_ids: Optional[list[str]] = None,
     require_stock: bool = True,
 ) -> list[Product]:
     """Получить товары для выгрузки (после дедупликации, cheapest available)."""
-    products = storage.get_all_products(active_suppliers=active_suppliers)
+    products = storage.get_all_products(active_supplier_ids=active_supplier_ids)
     products = deduplicate(
         products,
-        active_suppliers=active_suppliers,
+        active_supplier_ids=active_supplier_ids,
         require_stock=require_stock,
     )
     return [p for p in products if p.price > 0 and p.quantity > 0]
@@ -193,12 +200,13 @@ def generate_export_xml(
     """
     cfg = load_suppliers_config(config_path)
     suppliers = cfg.get("suppliers", [])
-    active = [s["name"] for s in suppliers if s.get("active", True)]
+    active = [s["id"] for s in suppliers if s.get("active", True)]
 
     storage = Storage(db_path or "data/products.db")
     products = get_export_products(
         storage,
-        active_suppliers=active,
+        active_supplier_ids=active,
         require_stock=require_stock,
     )
-    return build_export_xml(products, category_filter=category)
+    markup = float(cfg.get("markup_percent", 0) or 0)
+    return build_export_xml(products, category_filter=category, markup_percent=markup)
