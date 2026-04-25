@@ -1,112 +1,57 @@
 {
-  "updated_at": "2026-04-21T16:41:36+00:00",
+  "updated_at": "2026-04-25T17:04:27+00:00",
   "config_valid": true,
   "config_error": "",
   "sync_finished_ok": true,
   "sync_error": "",
   "had_category_load_errors": false,
   "categories": {
-    "supplier_1|tires": {
+    "keep|tires": {
       "outcome": "success",
       "detail": "",
-      "raw_items": 6535,
-      "accepted": 6496,
-      "filtered_out": 39,
-      "products_saved": 6496
-    },
-    "supplier_1|wheels": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 4246,
-      "accepted": 4197,
-      "filtered_out": 49,
-      "products_saved": 4197
-    },
-    "supplier_2|tires": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 51253,
-      "accepted": 51194,
-      "filtered_out": 59,
-      "products_saved": 51194
-    },
-    "supplier_2|wheels": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 25317,
-      "accepted": 23404,
-      "filtered_out": 1913,
-      "products_saved": 23404
-    },
-    "supplier_3|tires": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 68,
-      "accepted": 68,
+      "raw_items": 1,
+      "accepted": 1,
       "filtered_out": 0,
-      "products_saved": 68
+      "products_saved": 1
     },
-    "supplier_3|wheels": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 12,
-      "accepted": 12,
-      "filtered_out": 0,
-      "products_saved": 12
-    },
-    "supplier_4|tires": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 6506,
-      "accepted": 6506,
-      "filtered_out": 0,
-      "products_saved": 6506
-    },
-    "supplier_4|wheels": {
-      "outcome": "success",
-      "detail": "",
-      "raw_items": 7470,
-      "accepted": 7470,
-      "filtered_out": 0,
-      "products_saved": 7470
+    "keep|wheels": {
+      "outcome": "skipped_no_url",
+      "detail": "URL не задан"
     }
   },
   "export_stats": {
     "ingestion_totals": {
-      "success_category_loads": 8,
-      "raw_items": 101407,
-      "accepted": 99347,
-      "filtered_out": 2060,
-      "products_saved_to_db": 99347
+      "success_category_loads": 1,
+      "raw_items": 1,
+      "accepted": 1,
+      "filtered_out": 0,
+      "products_saved_to_db": 1
     },
     "deduplication": {
       "before_deduplicate_rows": {
-        "tires": 21712,
-        "wheels": 26773,
-        "total": 48485
+        "tires": 1,
+        "wheels": 0,
+        "total": 1
       },
       "after_deduplicate_rows": {
-        "tires": 20411,
-        "wheels": 17794,
-        "total": 38205
+        "tires": 1,
+        "wheels": 0,
+        "total": 1
       },
       "merged_duplicate_rows": {
-        "tires": 1301,
-        "wheels": 8979,
-        "total": 10280
+        "tires": 0,
+        "wheels": 0,
+        "total": 0
       },
       "after_price_quantity_filter_rows": {
-        "tires": 20411,
-        "wheels": 17794,
-        "total": 38205
+        "tires": 1,
+        "wheels": 0,
+        "total": 1
       }
     },
     "note_ru": "ingestion_totals — сумма по категориям с outcome success (сырой поток загрузки); deduplication.merged_duplicate_rows — на сколько строк уменьшилось число записей после deduplicate(require_stock=True): слияние дублей между поставщиками и отсев групп без подходящего остатка; filtered_out в categories — отсев на этапе адаптера."
   },
   "active_supplier_ids": [
-    "supplier_1",
-    "supplier_2",
-    "supplier_3",
-    "supplier_4"
+    "keep"
   ]
 }

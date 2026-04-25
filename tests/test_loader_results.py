@@ -130,3 +130,86 @@ def test_load_success(monkeypatch, tmp_path):
     assert r.outcome == LoadOutcome.SUCCESS
     assert len(r.products) == 1
     assert r.accepted == 1
+
+
+class _ClearanceThenGoodAdapter:
+    def __init__(self) -> None:
+        self._n = 0
+
+    def parse_product(self, elem, category):
+        self._n += 1
+        if self._n == 1:
+            return make_tire_product(PROIZVODITEL="  Распродажа   Уценка ", CML2_ARTICLE="bad")
+        return make_tire_product(NAME="Нормальное название", CML2_ARTICLE="good")
+
+
+def test_clearance_placeholder_name_filtered(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.loader.get_adapter", lambda *a, **k: _ClearanceThenGoodAdapter())
+    monkeypatch.setattr(
+        "src.loader.get_adapter_config",
+        lambda *a, **k: {"item_xpath_tires": "//offer"},
+    )
+    cache_dir = tmp_path
+    p = cache_dir / "sid_tires.xml"
+    p.write_bytes(
+        b'<?xml version="1.0"?><root><offer id="1"/><offer id="2"/></root>'
+    )
+    r = load_products_from_url(
+        "http://example.com/x.xml",
+        "sid",
+        "Name",
+        "tires",
+        cache_dir=cache_dir,
+        config_dir=tmp_path,
+        skip_fetch=True,
+    )
+    assert r.outcome == LoadOutcome.SUCCESS
+    assert r.raw_items == 2
+    assert r.filtered_out == 1
+    assert r.accepted == 1
+    assert r.products[0].CML2_ARTICLE == "good"
+
+
+class _ManufacturerClearanceAdapter:
+    def __init__(self) -> None:
+        self._n = 0
+
+    def parse_product(self, elem, category):
+        self._n += 1
+        if self._n == 1:
+            return make_tire_product(
+                NAME="Нормальное название",
+                PROIZVODITEL="РаспродажаУценка",
+                CML2_ARTICLE="bad-manufacturer",
+            )
+        return make_tire_product(NAME="Нормальное название", CML2_ARTICLE="good-manufacturer")
+
+
+def test_clearance_placeholder_manufacturer_filtered(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "src.loader.get_adapter",
+        lambda *a, **k: _ManufacturerClearanceAdapter(),
+    )
+    monkeypatch.setattr(
+        "src.loader.get_adapter_config",
+        lambda *a, **k: {"item_xpath_tires": "//offer"},
+    )
+    cache_dir = tmp_path
+    p = cache_dir / "sid_tires.xml"
+    p.write_bytes(
+        b'<?xml version="1.0"?><root><offer id="1"/><offer id="2"/></root>'
+    )
+    r = load_products_from_url(
+        "http://example.com/x.xml",
+        "sid",
+        "Name",
+        "tires",
+        cache_dir=cache_dir,
+        config_dir=tmp_path,
+        skip_fetch=True,
+    )
+    assert r.outcome == LoadOutcome.SUCCESS
+    assert r.raw_items == 2
+    assert r.filtered_out == 1
+    assert r.accepted == 1
+    assert r.products[0].CML2_ARTICLE == "good-manufacturer"

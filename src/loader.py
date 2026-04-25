@@ -22,6 +22,7 @@ from tenacity import (
 
 from .adapters import get_adapter
 from .models import Product
+from .product_filters import _is_outlet_clearance_product
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,13 @@ def load_products_from_url(
         elif not hasattr(elem, "tag"):
             continue
         p = adapter.parse_product(elem, category)
-        if p and _product_has_required_fields(p):
+        if not p:
+            filtered_out += 1
+            continue
+        if _is_outlet_clearance_product(p):
+            filtered_out += 1
+            continue
+        if _product_has_required_fields(p):
             products.append(p)
         else:
             filtered_out += 1

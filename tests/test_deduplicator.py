@@ -38,3 +38,26 @@ def test_none_active_filter_passes_all():
     b = make_tire_product(supplier_id="s2", CML2_ARTICLE="A2", MODEL_AVTOSHINY="Other")
     out = deduplicate([a, b], active_supplier_ids=None)
     assert len(out) == 2
+
+
+def test_active_supplier_ids_still_applies_with_article_priority():
+    active = make_tire_product(
+        supplier_id="active",
+        CML2_ARTICLE="ART-1",
+        price=500,
+        quantity=1,
+        PROIZVODITEL="A",
+        MODEL_AVTOSHINY="X",
+    )
+    inactive = make_tire_product(
+        supplier_id="inactive",
+        CML2_ARTICLE=" art-1 ",
+        price=100,
+        quantity=2,
+        PROIZVODITEL="B",
+        MODEL_AVTOSHINY="Y",
+    )
+
+    out = deduplicate([active, inactive], active_supplier_ids=["active"])
+    assert len(out) == 1
+    assert out[0].supplier_id == "active"

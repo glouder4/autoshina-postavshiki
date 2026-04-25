@@ -2,8 +2,8 @@
 Генерация объединённого XML из товаров после дедупликации.
 Конвертация значений поставщиков под наши требования при экспорте.
 """
-import math
 import re
+from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 from typing import Any, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -11,6 +11,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from .config import load_suppliers_config
 from .deduplicator import deduplicate
 from .models import Product
+from .product_filters import _is_outlet_clearance_product
 from .storage import Storage
 
 # Конвертация значений при экспорте (шины)
@@ -59,7 +60,9 @@ def _build_product_name(p: Product) -> str:
             parts.append(p.PROIZVODITEL)
         if p.MODEL_AVTOSHINY:
             parts.append(p.MODEL_AVTOSHINY)
-        w, h, d = p.SHIRINA_PROFILYA, p.VYSOTA_PROFILYA, str(p.POSADOCHNYY_DIAMETR).strip()
+        w = p.SHIRINA_PROFILYA
+        h = p.VYSOTA_PROFILYA
+        d = _normalize_tire_diameter(str(p.POSADOCHNYY_DIAMETR))
         if w and h:
             dim = f"{w}/{h}"
             if d:
@@ -95,6 +98,23 @@ def _first_photo_url(more_photo: str) -> str:
     return m.group(0) if m else more_photo.strip()
 
 
+def _normalize_tire_diameter(value: str) -> str:
+    raw = (value or "").strip()
+    m = re.match(r"^ZR(\d+)$", raw, flags=re.IGNORECASE)
+    if m:
+        return f"R{m.group(1)}"
+    return raw
+
+
+def _normalize_wheel_width(value: str) -> str:
+    raw = (value or "").strip()
+    first_part = raw.split("/", 1)[0].strip()
+    m = re.match(r"^(\d+(?:\.\d+)?)", first_part)
+    if m:
+        return m.group(1)
+    return first_part
+
+
 def _product_to_xml(parent: Element, p: Product, markup_percent: float = 0) -> None:
     """Добавить товар. Свойства — как отдельные дочерние элементы (плагины/предпросмотр лучше их видят)."""
     item = SubElement(parent, "product")
@@ -102,8 +122,13 @@ def _product_to_xml(parent: Element, p: Product, markup_percent: float = 0) -> N
     if p.OS_ARTICLE_ID:
         item.set("OS_ARTICLE_ID", p.OS_ARTICLE_ID)
     SubElement(item, "supplier").text = p.OS_SUPPLIER_TEXT or p.supplier
-    raw_price = p.price * (1 + markup_percent / 100) if markup_percent else p.price
-    price_val = math.ceil(float(raw_price))
+    base_price = Decimal(str(p.price))
+    if markup_percent:
+        markup_multiplier = Decimal("1") + (Decimal(str(markup_percent)) / Decimal("100"))
+        raw_price = base_price * markup_multiplier
+    else:
+        raw_price = base_price
+    price_val = int(raw_price.to_integral_value(rounding=ROUND_CEILING))
     SubElement(item, "price").text = str(price_val)
     SubElement(item, "quantity").text = str(p.quantity)
     brand_val = (p.PROIZVODITEL or "").strip()
@@ -122,6 +147,10 @@ def _product_to_xml(parent: Element, p: Product, markup_percent: float = 0) -> N
         val = getattr(p, name, "")
         if val:
             val_str = str(val).strip()
+            if p.category == "tires" and name == "POSADOCHNYY_DIAMETR":
+                val_str = _normalize_tire_diameter(val_str)
+            elif p.category == "wheels" and name == "SHIRINA_DISKA":
+                val_str = _normalize_wheel_width(val_str)
             val_str = _transform_export_value(name, val_str, p.category)
             child = SubElement(item, name)
             child.text = val_str
@@ -162,6 +191,8 @@ def build_export_xml(
         wheels = SubElement(root, "wheels")
 
     for p in products:
+        if _is_outlet_clearance_product(p):
+            continue
         if category_filter and p.category != category_filter:
             continue
         parent = tires if p.category == "tires" else wheels
