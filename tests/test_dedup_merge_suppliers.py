@@ -7,8 +7,10 @@
 """
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
 from src.deduplicator import deduplicate, group_duplicates
-from src.export import get_export_products
+from src.export import build_export_xml, get_export_products
 from src.storage import Storage
 from tests.conftest import make_tire_product, make_wheel_product
 
@@ -266,3 +268,54 @@ def test_export_pipeline_two_suppliers_merged_then_deduped(tmp_db_path):
     articles = {p.CML2_ARTICLE for p in out}
     assert articles == {"only", "d1"}
     assert len(out) == 2
+
+
+def test_dedup_winner_all_supplier_fields_from_winner_storage_and_xml(tmp_db_path):
+    """
+    Два поставщика, один dedup-ключ: победитель дешевле.
+    supplier/supplier_id/OS_SUPPLIER_TEXT/price/qty/OS_ARTICLE_ID и XML <supplier> — от победителя.
+    """
+    st = Storage(tmp_db_path)
+    winner_cfg = "Winner Config Name"
+    loser_cfg = "Loser Config Name"
+    cheap = _tire_same_specs_template(
+        supplier_id="win_sup",
+        supplier="stale-winner-supplier",
+        CML2_ARTICLE="WIN_ART",
+        price=50,
+        quantity=3,
+        OS_SUPPLIER_TEXT="Misleading feed text winner",
+    )
+    costly = _tire_same_specs_template(
+        supplier_id="lose_sup",
+        supplier="stale-loser-supplier",
+        CML2_ARTICLE="LOSE_ART",
+        price=200,
+        quantity=5,
+        OS_SUPPLIER_TEXT="Misleading feed text loser",
+    )
+    st.upsert_products([cheap], supplier=winner_cfg, supplier_id="win_sup", category="tires")
+    st.upsert_products([costly], supplier=loser_cfg, supplier_id="lose_sup", category="tires")
+
+    out = get_export_products(
+        st,
+        active_supplier_ids=["win_sup", "lose_sup"],
+        require_stock=True,
+    )
+    assert len(out) == 1
+    w = out[0]
+    assert w.supplier_id == "win_sup"
+    assert w.supplier == winner_cfg
+    assert w.OS_SUPPLIER_TEXT == winner_cfg
+    assert w.price == 50
+    assert w.quantity == 3
+    assert w.CML2_ARTICLE == "WIN_ART"
+    assert w.OS_ARTICLE_ID == "os_article_win_sup_WIN_ART"
+
+    xml_bytes = build_export_xml(out, category_filter="tires")
+    text = xml_bytes.decode("utf-8")
+    start = text.find("<catalog")
+    root = ET.fromstring(text[start:])
+    supplier_el = root.find("./tires/product/supplier")
+    assert supplier_el is not None
+    assert supplier_el.text == winner_cfg

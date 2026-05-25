@@ -89,6 +89,43 @@ def test_wheel_duplicate_group():
     assert out[0].price == 150
 
 
+def test_wheels_different_disk_color_do_not_merge():
+    """Разный цвет диска — это разные SKU, даже при одинаковых остальных характеристиках."""
+    rich_stock = make_wheel_product(
+        supplier_id="supplier_2",
+        CML2_ARTICLE="9320085",
+        price=9200,
+        quantity=19,
+        PROIZVODITEL="Replay",
+        MODEL_DISKA="TY120",
+        SHIRINA_DISKA="7.0",
+        POSADOCHNYY_DIAMETR_DISKA="17",
+    )
+    low_stock = make_wheel_product(
+        supplier_id="supplier_2",
+        CML2_ARTICLE="9331139",
+        price=8730,
+        quantity=2,
+        PROIZVODITEL="Replay",
+        MODEL_DISKA="TY120",
+        SHIRINA_DISKA="7.0",
+        POSADOCHNYY_DIAMETR_DISKA="17",
+    )
+    for p in (rich_stock, low_stock):
+        p.COUNT_OTVERSTIY = "5"
+        p.MEZHBOLTOVOE_RASSTOYANIE = "114.3"
+        p.VYLET_DISKA = "45"
+        p.DIAMETR_STUPITSY = "60.1"
+        p.WHEEL_TYPE = "литой"
+    rich_stock.DISK_COLOR = "S"
+    low_stock.DISK_COLOR = "BKF"
+
+    out = deduplicate([rich_stock, low_stock])
+    assert len(out) == 2
+    assert {p.CML2_ARTICLE for p in out} == {"9320085", "9331139"}
+    assert sorted(p.quantity for p in out) == [2, 19]
+
+
 def test_same_article_deduplicates_despite_name_brand_and_case_differences():
     """Одинаковый валидный артикул в категории схлопывается в одну запись."""
     p1 = make_tire_product(
@@ -277,6 +314,68 @@ def test_name_key_separator_normalization_does_not_break_article_fallback():
     out = deduplicate([first, second])
     assert len(out) == 1
     assert out[0].price == 180
+
+
+def test_tire_16_vs_r16_merges():
+    """16 и R16 после нормализации дают один ключ дедупликации."""
+    a = make_tire_product(
+        supplier_id="s1",
+        CML2_ARTICLE="",
+        PROIZVODITEL="B",
+        MODEL_AVTOSHINY="M",
+        SEZONNOST="Летняя",
+        SHIRINA_PROFILYA="205",
+        VYSOTA_PROFILYA="55",
+        POSADOCHNYY_DIAMETR="16",
+        price=200,
+        quantity=1,
+    )
+    b = make_tire_product(
+        supplier_id="s2",
+        CML2_ARTICLE="",
+        PROIZVODITEL="B",
+        MODEL_AVTOSHINY="M",
+        SEZONNOST="Летняя",
+        SHIRINA_PROFILYA="205",
+        VYSOTA_PROFILYA="55",
+        POSADOCHNYY_DIAMETR="R16",
+        price=150,
+        quantity=1,
+    )
+    out = deduplicate([a, b])
+    assert len(out) == 1
+    assert out[0].price == 150
+
+
+def test_tire_zr17_vs_17_merges():
+    """zr17 и 17 после нормализации дают один ключ дедупликации."""
+    a = make_tire_product(
+        supplier_id="s1",
+        CML2_ARTICLE="",
+        PROIZVODITEL="B",
+        MODEL_AVTOSHINY="M",
+        SEZONNOST="Летняя",
+        SHIRINA_PROFILYA="205",
+        VYSOTA_PROFILYA="55",
+        POSADOCHNYY_DIAMETR="zr17",
+        price=200,
+        quantity=1,
+    )
+    b = make_tire_product(
+        supplier_id="s2",
+        CML2_ARTICLE="",
+        PROIZVODITEL="B",
+        MODEL_AVTOSHINY="M",
+        SEZONNOST="Летняя",
+        SHIRINA_PROFILYA="205",
+        VYSOTA_PROFILYA="55",
+        POSADOCHNYY_DIAMETR="17",
+        price=150,
+        quantity=1,
+    )
+    out = deduplicate([a, b])
+    assert len(out) == 1
+    assert out[0].price == 150
 
 
 def test_tire_zr_vs_r_in_posadochnyy_diametr_merges():

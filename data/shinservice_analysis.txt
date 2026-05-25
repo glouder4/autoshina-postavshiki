@@ -1,0 +1,39 @@
+supplier_3 (shinservice) tires in DB: 68
+in final export: 7
+
+By status:
+  Проиграл дедуп (в БД, нет в экспорте): 61
+  Победитель дедупа (в экспорте): 7
+
+61 dedup_loser: export winner supplier breakdown:
+  4tochki (supplier_1): 41
+  svrauto (supplier_2): 14
+  shinservice (supplier_3): 6
+
+Sample loser -> winner:
+  SS 4385100 11421.0r qty81 | winner svrauto 4385100 7948.0r qty2 | Formula 235/55Rr18
+  SS 4383900 9040.0r qty81 | winner 4tochki 4383900 9040.0r qty120 | Formula 215/60Rr17
+  SS 4383400 8077.0r qty81 | winner 4tochki 4383400 8077.0r qty4 | Formula 225/65Rr17
+  SS 4384000 8644.0r qty81 | winner 4tochki 4384000 8644.0r qty45 | Formula 235/65Rr17
+  SS 4374300 7947.0r qty6 | winner 4tochki 4374300 7947.0r qty91 | Formula 215/50Rr17
+  SS 4467100 11687.0r qty81 | winner 4tochki 4467100 11687.0r qty120 | Formula 235/55Rr19
+  SS 4464000 13164.0r qty81 | winner 4tochki 4464000 13164.0r qty20 | Formula 225/55Rr19
+  SS 4464100 11232.0r qty81 | winner 4tochki 4464100 11232.0r qty69 | Formula 235/45Rr18
+  SS 4463600 7344.0r qty81 | winner 4tochki 4463600 7344.0r qty80 | Formula 205/50Rr17
+  SS 4385000 10546.0r qty17 | winner svrauto 4385000 10546.0r qty5 | Formula 265/60Rr18
+  SS 4383200 8768.0r qty81 | winner 4tochki 4383200 8768.0r qty72 | Formula 225/60Rr17
+  SS 4389300 10210.0r qty81 | winner 4tochki 4389300 10210.0r qty146 | Formula 265/65Rr17
+  SS 4370200 5619.0r qty81 | winner 4tochki 4370200 5619.0r qty127 | Formula 205/55Rr16
+  SS 4383500 10139.0r qty28 | winner 4tochki 4383500 10139.0r qty80 | Formula 245/70Rr16
+  SS 4383300 8473.0r qty11 | winner shinservice 2349600 8186.0r qty1 | Formula 215/70Rr16
+
+7 export winners from shinservice:
+  4372209 8551.0r qty1 Formula 215/55Rr17
+  4383100 6781.0r qty1 Formula 215/65Rr16
+  2349600 8186.0r qty1 Formula 215/70Rr16
+  4402200 7084.0r qty4 Formula 215/60Rr17
+  44018Q0 8899.0r qty4 Formula 235/55Rr18
+  44017Q0 8089.0r qty8 Formula 225/60Rr18
+  44010Q0 7365.0r qty5 Formula 215/55Rr17
+
+Cache XML //tires/tire nodes: 68 (same as DB if sync ok)

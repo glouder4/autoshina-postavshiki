@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Диагностика дедупликации</title>
+  <style>
+    :root { --bg: #f4f6f8; --card: #fff; --border: #d0d7de; --winner: #1a7f37; --loser: #9a6700; --drop: #cf222e; --muted: #656d76; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: var(--bg); color: #1f2328; max-width: 1200px; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    input, select, button { font: inherit; padding: 0.35rem 0.5rem; }
+    button { cursor: pointer; background: #0969da; color: #fff; border: none; border-radius: 4px; }
+    button:hover { background: #0550ae; }
+    button.secondary { background: #656d76; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .badge { display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600; max-width: 280px; white-space: normal; line-height: 1.3; }
+    .badge.export_winner, .badge.unique_in_export { background: #dafbe1; color: var(--winner); }
+    .badge.dedup_loser { background: #fff8c5; color: var(--loser); }
+    .badge.dedup_group_dropped, .badge.price_qty_filter, .badge.inactive_supplier { background: #ffebe9; color: var(--drop); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:hover { background: #f6f8fa; cursor: pointer; }
+    tr.best { background: #dafbe1; }
+    tr.clickable { cursor: pointer; }
+    tr.selected { outline: 2px solid #0969da; background: #eef6ff; }
+    .muted { color: var(--muted); font-size: 0.8rem; }
+    .funnel dt { font-weight: 600; margin-top: 0.35rem; }
+    .funnel dd { margin: 0 0 0.25rem 0.5rem; }
+    .funnel-section { border-left: 3px solid #0969da; padding-left: 0.5rem; margin: 0.5rem 0; }
+    .funnel-section.load { border-color: #8250df; }
+    .funnel-section.dedup { border-color: #9a6700; }
+    #err { color: var(--drop); }
+    .hidden { display: none; }
+    .hint { background: #fff8c5; border: 1px solid #d4a72c; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.75rem; font-size: 0.85rem; }
+    .winner-box { background: #dafbe1; border: 1px solid #1a7f37; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .winner-box.missing { background: #ffebe9; border-color: #cf222e; }
+    tr.queried { background: #fff8c5; }
+    tr.export-winner-row { background: #dafbe1; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Диагностика дедупликации</h1>
+  <p class="muted">Только для отладки. API без аутентификации — не выставляйте в интернет.</p>
+
+  <div class="hint">
+    <strong>Куда делись тысячи позиций из фида?</strong> Сначала смотрите блок «Загрузка (sync)» в воронке:
+    из ~65543 узлов в XML в БД попадает только то, что прошло адаптер (цена, фото, название).
+    Дедуп — уже <em>после</em> БД. Чтобы увидеть проигравших дедуп, выберите поставщика + статус
+    «Проиграл дедуп» и нажмите «Показать по статусу».
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input type="search" id="q" placeholder="Артикул (CML2_ARTICLE)…" size="32">
+      <select id="category">
+        <option value="">все категории</option>
+        <option value="tires">шины</option>
+        <option value="wheels">диски</option>
+      </select>
+      <select id="supplier_id"><option value="">все поставщики</option></select>
+      <select id="status_filter">
+        <option value="">любой статус</option>
+      </select>
+      <button type="button" id="btnSearch">Поиск</button>
+      <button type="button" id="btnByStatus" class="secondary">Показать по статусу</button>
+    </div>
+    <div id="err"></div>
+    <div id="lookupResults" class="hidden"></div>
+    <p class="muted" id="resultHint"></p>
+    <table id="results" class="hidden">
+      <thead><tr><th>id</th><th>статус</th><th>поставщик</th><th>артикул</th><th>модель</th><th>цена</th><th>остаток</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card hidden" id="detailCard">
+    <h2>Карточка <span id="detailId"></span></h2>
+    <p id="detailMeta"></p>
+    <button type="button" id="btnGroup">Группа дублей</button>
+  </div>
+
+  <div class="card hidden" id="groupCard">
+    <h2>Группа <span id="groupKey"></span> (<span id="groupSize"></span>)</h2>
+    <table id="groupTable">
+      <thead><tr><th></th><th>статус</th><th>поставщик</th><th>артикул</th><th>цена</th><th>qty</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="allFunnelCard">
+    <h2>Сводка по всем поставщикам</h2>
+    <div class="row">
+      <select id="all_funnel_category">
+        <option value="tires">шины</option>
+        <option value="wheels">диски</option>
+      </select>
+      <button type="button" id="btnAllFunnel">Обновить сводку</button>
+    </div>
+    <p class="muted">Клик по строке — детальная воронка выбранного поставщика ниже.</p>
+    <table id="allFunnelTable">
+      <thead>
+        <tr>
+          <th>поставщик</th>
+          <th>активен</th>
+          <th>в фиде</th>
+          <th>в БД</th>
+          <th>в экспорте</th>
+          <th>проиграл дедуп</th>
+          <th>отсечён при загрузке</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p class="muted" id="globalDedupNote"></p>
+  </div>
+
+  <div class="card" id="funnelCard">
+    <h2 id="funnelTitle">Детальная воронка</h2>
+    <div class="row">
+      <select id="funnel_supplier"><option value="">— выберите —</option></select>
+      <select id="funnel_category">
+        <option value="tires">шины</option>
+        <option value="wheels">диски</option>
+      </select>
+      <button type="button" id="btnFunnel">Обновить воронку</button>
+      <button type="button" id="btnShowLosers" class="secondary">Показать проигравших дедуп</button>
+    </div>
+    <div id="funnelBody"></div>
+  </div>
+
+  <script>
+    const API = '/api/diag';
+    let STATUS_LABELS = {};
+    let SUPPLIER_NAMES = {};
+
+    function supplierDisplay(rowOrId) {
+      if (rowOrId == null || rowOrId === '') return '';
+      if (typeof rowOrId === 'string') return SUPPLIER_NAMES[rowOrId] || rowOrId;
+      return rowOrId.supplier || rowOrId.supplier_name || SUPPLIER_NAMES[rowOrId.supplier_id] || rowOrId.supplier_id || '';
+    }
+
+    function label(status, row) {
+      if (row && row.export_status_label) return row.export_status_label;
+      return STATUS_LABELS[status] || status;
+    }
+
+    function badge(status, row) {
+      const s = status || 'unknown';
+      const text = label(s, row);
+      return `<span class="badge ${s}" title="${s}">${text}</span>`;
+    }
+
+    async function api(path) {
+      const r = await fetch(API + path);
+      if (!r.ok) throw new Error(await r.text() || r.statusText);
+      return r.json();
+    }
+
+    function renderMemberRow(m, opts = {}) {
+      const tr = document.createElement('tr');
+      if (m.is_export_winner) tr.classList.add('export-winner-row');
+      if (m.is_queried_article) tr.classList.add('queried');
+      const role = m.is_export_winner ? '★ в экспорте' : (m.is_queried_article ? '→ ваш артикул' : '');
+      tr.innerHTML = `
+        <td>${role}</td>
+        <td>${badge(m.export_status, m)}</td>
+        <td>${supplierDisplay(m)}</td>
+        <td>${m.CML2_ARTICLE || ''}</td>
+        <td>${m.display_model || ''}</td>
+        <td>${m.price}</td>
+        <td>${m.quantity}</td>`;
+      if (opts.onClick) tr.addEventListener('click', () => opts.onClick(m.id));
+      return tr;
+    }
+
+    function showLookupResults(data) {
+      const box = document.getElementById('lookupResults');
+      box.classList.remove('hidden');
+      document.getElementById('results').classList.add('hidden');
+      document.getElementById('detailCard').classList.add('hidden');
+      document.getElementById('groupCard').classList.add('hidden');
+
+      let html = `<h2>Результат по артикулу «${data.article}»</h2>`;
+      if (!data.groups || !data.groups.length) {
+        html += '<p class="muted">Артикул не найден в БД.</p>';
+        box.innerHTML = html;
+        document.getElementById('resultHint').textContent = '';
+        return;
+      }
+
+      data.groups.forEach((g, idx) => {
+        const w = g.export_winner;
+        html += `<div class="card" style="margin-top:0.5rem">`;
+        html += `<p class="muted">Группа ${g.group_key} · ${g.category} · ${g.size} поз.</p>`;
+
+        if (w) {
+          html += `<div class="winner-box">
+            <strong>Основной товар в экспорте</strong><br>
+            ${badge(w.export_status, w)} · <strong>${supplierDisplay(w)}</strong> · арт. ${w.CML2_ARTICLE}<br>
+            ${w.display_model || ''} · ${w.price} ₽ · остаток ${w.quantity}
+          </div>`;
+        } else {
+          html += `<div class="winner-box missing">
+            <strong>Ни одна позиция группы не попала в экспорт</strong>
+            (нет остатка, отсечены по цене/qty или поставщик неактивен)
+          </div>`;
+        }
+
+        if (g.queried_products && g.queried_products.length) {
+          const qp = g.queried_products[0];
+          if (w && qp.id !== w.id) {
+            html += `<p>Ваш артикул: <strong>${supplierDisplay(qp)}</strong> / ${qp.CML2_ARTICLE} — ${badge(qp.export_status, qp)} (схлопнулся с победителем выше)</p>`;
+          }
+        }
+
+        html += `<table><thead><tr><th></th><th>статус</th><th>поставщик</th><th>артикул</th><th>модель</th><th>цена</th><th>qty</th></tr></thead><tbody id="lookupMembers${idx}"></tbody></table>`;
+        html += `</div>`;
+      });
+
+      box.innerHTML = html;
+      document.getElementById('resultHint').textContent =
+        `Найдено групп дедупа: ${data.groups.length}. Зелёная строка — то, что в tires.xml / wheels.xml.`;
+
+      data.groups.forEach((g, idx) => {
+        const tbody = document.getElementById(`lookupMembers${idx}`);
+        (g.members || []).forEach(m => tbody.appendChild(renderMemberRow(m)));
+      });
+    }
+
+    function renderRows(items) {
+      const tbody = document.querySelector('#results tbody');
+      tbody.innerHTML = '';
+      document.getElementById('lookupResults').classList.add('hidden');
+      document.getElementById('results').classList.remove('hidden');
+      document.getElementById('resultHint').textContent =
+        items.length ? `Найдено: ${items.length}` : 'Ничего не найдено — попробуйте «Показать по статусу» с поставщиком supplier_3';
+      (items || []).forEach(row => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = row.id;
+        tr.innerHTML = `<td>${row.id}</td><td>${badge(row.export_status, row)}</td><td>${supplierDisplay(row)}</td><td>${row.CML2_ARTICLE || ''}</td><td>${row.display_model || ''}</td><td>${row.price}</td><td>${row.quantity}</td>`;
+        tr.addEventListener('click', () => showProduct(row.id));
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadStatuses() {
+      const data = await api('/statuses');
+      const sel = document.getElementById('status_filter');
+      (data.statuses || []).forEach(s => {
+        STATUS_LABELS[s.code] = s.label_ru;
+        const o = document.createElement('option');
+        o.value = s.code;
+        o.textContent = s.label_ru;
+        sel.appendChild(o);
+      });
+    }
+
+    async function loadSuppliers() {
+      const data = await api('/suppliers');
+      const sel = document.getElementById('supplier_id');
+      const fsel = document.getElementById('funnel_supplier');
+      fsel.innerHTML = '<option value="">— выберите —</option>';
+      SUPPLIER_NAMES = {};
+      (data.suppliers || []).forEach(s => {
+        SUPPLIER_NAMES[s.id] = s.name || s.id;
+        const o = document.createElement('option');
+        o.value = s.id;
+        o.textContent = `${s.id} (${s.name})${s.active ? '' : ' [off]'}`;
+        sel.appendChild(o);
+        const o2 = o.cloneNode(true);
+        fsel.appendChild(o2);
+      });
+      if (fsel.options.length > 1) {
+        fsel.selectedIndex = 1;
+      }
+    }
+
+    function updateFunnelTitle() {
+      const sup = document.getElementById('funnel_supplier');
+      const cat = document.getElementById('funnel_category');
+      const label = sup.selectedOptions[0]?.textContent || sup.value || '—';
+      const catLabel = cat.value === 'wheels' ? 'диски' : 'шины';
+      document.getElementById('funnelTitle').textContent =
+        `Детальная воронка: ${label} / ${catLabel}`;
+    }
+
+    function selectSupplierForDetail(supplierId, category) {
+      document.getElementById('funnel_supplier').value = supplierId;
+      document.getElementById('funnel_category').value = category;
+      document.getElementById('all_funnel_category').value = category;
+      updateFunnelTitle();
+      loadFunnel().catch(console.error);
+      document.getElementById('funnelCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function loadAllFunnel() {
+      const cat = document.getElementById('all_funnel_category').value;
+      document.getElementById('funnel_category').value = cat;
+      const data = await api(`/suppliers/summary?category=${cat}`);
+      const tbody = document.querySelector('#allFunnelTable tbody');
+      tbody.innerHTML = '';
+      (data.suppliers || []).forEach(row => {
+        const tr = document.createElement('tr');
+        tr.classList.add('clickable');
+        const ing = row.ingestion || {};
+        const inFeed = ing.raw_items_in_feed != null ? ing.raw_items_in_feed : '—';
+        const filtered = ing.filtered_out_at_load != null ? ing.filtered_out_at_load : '—';
+        tr.innerHTML = `
+          <td><strong>${supplierDisplay(row)}</strong></td>
+          <td>${row.supplier_active ? 'да' : 'нет'}</td>
+          <td>${inFeed}</td>
+          <td>${row.rows_in_db}</td>
+          <td>${row.in_export}</td>
+          <td>${row.dedup_losers ?? (row.status_counts?.dedup_loser ?? 0)}</td>
+          <td>${filtered}</td>`;
+        tr.addEventListener('click', () => {
+          tbody.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
+          tr.classList.add('selected');
+          selectSupplierForDetail(row.supplier_id, cat);
+        });
+        tbody.appendChild(tr);
+      });
+      const st = data.export_dedup_stats || {};
+      const note = document.getElementById('globalDedupNote');
+      if (st.before_deduplicate_rows) {
+        note.textContent =
+          `Дедуп всех поставщиков (${cat}): в БД ${st.before_deduplicate_rows[cat]} → ` +
+          `после дедупа ${st.after_deduplicate_rows[cat]} (слито ${st.merged_duplicate_rows[cat]})`;
+      } else {
+        note.textContent = '';
+      }
+    }
+
+    async function doSearch() {
+      document.getElementById('err').textContent = '';
+      const q = document.getElementById('q').value.trim();
+      if (!q) {
+        document.getElementById('err').textContent = 'Введите артикул или текст для поиска';
+        return;
+      }
+      const cat = document.getElementById('category').value;
+      const sup = document.getElementById('supplier_id').value;
+      let lookupUrl = `/lookup?article=${encodeURIComponent(q)}`;
+      if (cat) lookupUrl += `&category=${cat}`;
+      if (sup) lookupUrl += `&supplier_id=${encodeURIComponent(sup)}`;
+
+      const lookup = await api(lookupUrl);
+      if (lookup.found) {
+        showLookupResults(lookup);
+        return;
+      }
+
+      const st = document.getElementById('status_filter').value;
+      let url = `/search?q=${encodeURIComponent(q)}`;
+      if (cat) url += `&category=${cat}`;
+      if (sup) url += `&supplier_id=${encodeURIComponent(sup)}`;
+      if (st) url += `&status=${encodeURIComponent(st)}`;
+      const data = await api(url);
+      renderRows(data.items || []);
+      document.getElementById('resultHint').textContent =
+        data.items?.length
+          ? `Артикул не найден; показан текстовый поиск: ${data.items.length} поз.`
+          : 'Ничего не найдено';
+    }
+
+    async function doByStatus() {
+      document.getElementById('err').textContent = '';
+      const sup = document.getElementById('supplier_id').value || document.getElementById('funnel_supplier').value;
+      const st = document.getElementById('status_filter').value || 'dedup_loser';
+      const cat = document.getElementById('category').value || document.getElementById('funnel_category').value || 'tires';
+      if (!sup) {
+        document.getElementById('err').textContent = 'Выберите поставщика';
+        return;
+      }
+      document.getElementById('status_filter').value = st;
+      document.getElementById('supplier_id').value = sup;
+      const data = await api(
+        `/supplier/${encodeURIComponent(sup)}/products?category=${cat}&status=${encodeURIComponent(st)}&limit=200`
+      );
+      renderRows(data.items || []);
+      document.getElementById('resultHint').textContent =
+        `Поставщик ${supplierDisplay(sup)}, статус «${label(st)}»: ${data.total} шт. (показано ${(data.items||[]).length})`;
+    }
+
+    async function showProduct(id) {
+      const p = await api(`/product/${id}`);
+      document.getElementById('detailCard').classList.remove('hidden');
+      document.getElementById('detailId').textContent = id;
+      document.getElementById('detailMeta').innerHTML =
+        `${badge(p.export_status, p)} ${supplierDisplay(p)} · ${p.CML2_ARTICLE} · ${p.price} ₽ · qty ${p.quantity}` +
+        (p.in_export ? ' · <strong>в экспорте</strong>' : ' · <strong>не в экспорте</strong>') +
+        (p.group_size > 1 ? ` · группа ${p.group_size} поз.` : '');
+      document.getElementById('btnGroup').onclick = () => showGroup(id);
+    }
+
+    async function showGroup(id) {
+      const g = await api(`/group?product_id=${id}`);
+      document.getElementById('groupCard').classList.remove('hidden');
+      document.getElementById('groupKey').textContent = g.group_key;
+      document.getElementById('groupSize').textContent = g.size;
+      const tbody = document.querySelector('#groupTable tbody');
+      tbody.innerHTML = '';
+      (g.members || []).forEach(m => {
+        const tr = document.createElement('tr');
+        if (m.is_group_best) tr.classList.add('best');
+        tr.innerHTML = `<td>${m.is_group_best ? '★ победитель' : ''}</td><td>${badge(m.export_status, m)}</td><td>${supplierDisplay(m)}</td><td>${m.CML2_ARTICLE}</td><td>${m.price}</td><td>${m.quantity}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function fmtIngestion(ing) {
+      if (!ing) return '<p class="muted">Нет данных sync_state для этой категории (запустите синхронизацию).</p>';
+      if (ing.outcome && ing.outcome !== 'success') {
+        return `<p class="muted">Загрузка: ${ing.outcome} — ${ing.detail || ''}</p>`;
+      }
+      return `
+        <div class="funnel-section load">
+          <strong>Загрузка (последний sync)</strong>
+          <dl class="funnel">
+            <dt>В XML-фиде (raw_items)</dt><dd>${ing.raw_items_in_feed}</dd>
+            <dt>Принято адаптером</dt><dd>${ing.accepted_by_adapter}</dd>
+            <dt>Отфильтровано при загрузке</dt><dd>${ing.filtered_out_at_load} <span class="muted">(нет цены/фото/названия, outlet и т.д.)</span></dd>
+            <dt>Сохранено в БД</dt><dd>${ing.products_saved_to_db}</dd>
+            ${ing.sync_updated_at ? `<dt>Sync</dt><dd>${ing.sync_updated_at}</dd>` : ''}
+          </dl>
+        </div>`;
+    }
+
+    async function loadFunnel() {
+      const sup = document.getElementById('funnel_supplier').value;
+      const cat = document.getElementById('funnel_category').value;
+      updateFunnelTitle();
+      if (!sup) {
+        document.getElementById('funnelBody').innerHTML =
+          '<p class="muted">Выберите поставщика в списке выше или кликните строку в сводной таблице.</p>';
+        return;
+      }
+      const f = await api(`/supplier/${encodeURIComponent(sup)}/summary?category=${cat}`);
+      const body = document.getElementById('funnelBody');
+      let html = fmtIngestion(f.ingestion);
+      html += `
+        <div class="funnel-section dedup">
+          <strong>БД и дедуп (этот поставщик)</strong>
+          <dl class="funnel">
+            <dt>Сейчас в БД</dt><dd>${f.rows_in_db}</dd>
+            <dt>Активен в конфиге</dt><dd>${f.supplier_active ? 'да' : 'нет'}</dd>
+            <dt>В итоговом экспорте</dt><dd>${f.in_export}</dd>
+          </dl>
+        </div>`;
+      const sc = f.status_counts_ru || {};
+      if (Object.keys(sc).length) {
+        html += '<dl class="funnel"><dt>По статусам</dt>';
+        Object.entries(sc).sort((a,b)=>b[1]-a[1]).forEach(([k,v]) => {
+          html += `<dd>${k}: <strong>${v}</strong></dd>`;
+        });
+        html += '</dl>';
+      }
+      const st = f.export_dedup_stats || {};
+      if (st.before_deduplicate_rows) {
+        html += `<p class="muted">Дедуп всех поставщиков: в БД ${JSON.stringify(st.before_deduplicate_rows)} → после дедупа ${JSON.stringify(st.after_deduplicate_rows)} (слито ${JSON.stringify(st.merged_duplicate_rows)})</p>`;
+      }
+      body.innerHTML = html;
+    }
+
+    document.getElementById('btnSearch').addEventListener('click', () => doSearch().catch(e => { document.getElementById('err').textContent = e.message; }));
+    document.getElementById('btnByStatus').addEventListener('click', () => doByStatus().catch(e => { document.getElementById('err').textContent = e.message; }));
+    document.getElementById('btnFunnel').addEventListener('click', () => loadFunnel().catch(e => { document.getElementById('funnelBody').innerHTML = `<p class="muted">${e.message}</p>`; }));
+    document.getElementById('btnAllFunnel').addEventListener('click', () => loadAllFunnel().catch(e => { document.getElementById('globalDedupNote').textContent = e.message; }));
+    document.getElementById('all_funnel_category').addEventListener('change', () => loadAllFunnel().catch(console.error));
+    document.getElementById('funnel_supplier').addEventListener('change', updateFunnelTitle);
+    document.getElementById('funnel_category').addEventListener('change', () => {
+      document.getElementById('all_funnel_category').value = document.getElementById('funnel_category').value;
+      updateFunnelTitle();
+    });
+    document.getElementById('btnShowLosers').addEventListener('click', () => {
+      document.getElementById('status_filter').value = 'dedup_loser';
+      document.getElementById('supplier_id').value = document.getElementById('funnel_supplier').value;
+      document.getElementById('category').value = document.getElementById('funnel_category').value;
+      doByStatus().catch(e => { document.getElementById('err').textContent = e.message; });
+    });
+    document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+    Promise.all([loadStatuses(), loadSuppliers()])
+      .then(() => loadAllFunnel())
+      .then(() => loadFunnel())
+      .catch(console.error);
+  </script>
+</body>
+</html>

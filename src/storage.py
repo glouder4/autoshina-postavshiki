@@ -179,6 +179,7 @@ class Storage:
             d["CML2_ARTICLE"] = article
             d["supplier"] = supplier
             d["supplier_id"] = supplier_id
+            d["OS_SUPPLIER_TEXT"] = supplier
             d["category"] = category
             d.pop("id", None)
             d["OS_ARTICLE_ID"] = f"os_article_{supplier_id}_{article}"
@@ -227,3 +228,90 @@ class Storage:
                 "DELETE FROM products WHERE supplier_id = ?", (supplier_id,)
             )
         logger.info("Удалены товары поставщика %s", supplier_id)
+
+    def get_product_by_id(self, product_id: int) -> Optional[Product]:
+        """Одна позиция по id или None."""
+        with self._get_conn() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM products WHERE id = ?", (product_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            return Product.from_dict(dict(row))
+
+    def search_products(
+        self,
+        q: str,
+        category: Optional[str] = None,
+        supplier_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[Product]:
+        """
+        Поиск по подстроке (LIKE, без учёта регистра) в CML2_ARTICLE, NAME,
+        MODEL_AVTOSHINY, MODEL_DISKA.
+        """
+        q = (q or "").strip()
+        if not q:
+            return []
+        limit = max(1, min(int(limit), 200))
+        pattern = f"%{q}%"
+        sql = (
+            "SELECT * FROM products WHERE ("
+            "LOWER(CML2_ARTICLE) LIKE LOWER(?) OR "
+            "LOWER(NAME) LIKE LOWER(?) OR "
+            "LOWER(MODEL_AVTOSHINY) LIKE LOWER(?) OR "
+            "LOWER(MODEL_DISKA) LIKE LOWER(?)"
+            ")"
+        )
+        params: list[object] = [pattern, pattern, pattern, pattern]
+        if category:
+            sql += " AND category = ?"
+            params.append(category)
+        if supplier_id:
+            sql += " AND supplier_id = ?"
+            params.append(supplier_id)
+        sql += " ORDER BY price ASC LIMIT ?"
+        params.append(limit)
+
+        with self._get_conn() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+            return [Product.from_dict(dict(r)) for r in rows]
+
+    def find_by_article(
+        self,
+        article: str,
+        category: Optional[str] = None,
+        supplier_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> list[Product]:
+        """
+        Поиск по артикулу: сначала точное совпадение CML2_ARTICLE, затем подстрока.
+        """
+        article = (article or "").strip()
+        if not article:
+            return []
+        limit = max(1, min(int(limit), 50))
+
+        def _query(extra_sql: str, extra_params: list[object]) -> list[Product]:
+            sql = "SELECT * FROM products WHERE " + extra_sql
+            params = list(extra_params)
+            if category:
+                sql += " AND category = ?"
+                params.append(category)
+            if supplier_id:
+                sql += " AND supplier_id = ?"
+                params.append(supplier_id)
+            sql += " ORDER BY price ASC LIMIT ?"
+            params.append(limit)
+            with self._get_conn() as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(sql, params).fetchall()
+                return [Product.from_dict(dict(r)) for r in rows]
+
+        exact = _query("LOWER(CML2_ARTICLE) = LOWER(?)", [article])
+        if exact:
+            return exact
+        pattern = f"%{article}%"
+        return _query("LOWER(CML2_ARTICLE) LIKE LOWER(?)", [pattern])

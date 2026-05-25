@@ -1,6 +1,8 @@
 """Ветки LoadResult без сети (моки)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import requests
 
 from src.loader import LoadOutcome, load_products_from_url
@@ -130,6 +132,49 @@ def test_load_success(monkeypatch, tmp_path):
     assert r.outcome == LoadOutcome.SUCCESS
     assert len(r.products) == 1
     assert r.accepted == 1
+
+
+def test_supplier_2_wheels_parses_nrest_quantity_from_xml(tmp_path):
+    cache_file = tmp_path / "supplier_2_wheels.xml"
+    cache_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<ROOT>
+  <COMMODITIES NAME="DISK">
+    <COMMODITY>
+      <SMNFCODE>9320085</SMNFCODE>
+      <NNOMMODIF>1</NNOMMODIF>
+      <SMARKA>Replay</SMARKA>
+      <SMODEL>TY120</SMODEL>
+      <SWIDTH>7.0</SWIDTH>
+      <SDIAMETR>17</SDIAMETR>
+      <SHOLESQUANT>5</SHOLESQUANT>
+      <SPCD>114.3</SPCD>
+      <SWHEELOFFSET>45</SWHEELOFFSET>
+      <SDIA>60.1</SDIA>
+      <STYPE>литой</STYPE>
+      <SCOLOR>S</SCOLOR>
+      <NPRICE_RRP>9200</NPRICE_RRP>
+      <NREST>19</NREST>
+      <SPICTURE>https://example.com/wheel.jpg</SPICTURE>
+      <supplier>svrauto</supplier>
+    </COMMODITY>
+  </COMMODITIES>
+</ROOT>
+""",
+        encoding="utf-8",
+    )
+    result = load_products_from_url(
+        "http://example.com/supplier_2.xml",
+        "supplier_2",
+        "svrauto",
+        "wheels",
+        cache_dir=tmp_path,
+        config_dir=Path("config"),
+        skip_fetch=True,
+    )
+    assert result.outcome == LoadOutcome.SUCCESS
+    assert len(result.products) == 1
+    assert result.products[0].quantity == 19
 
 
 class _ClearanceThenGoodAdapter:

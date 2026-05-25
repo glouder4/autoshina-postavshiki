@@ -30,6 +30,7 @@ def make_tire_product(
         SHIRINA_PROFILYA=kwargs.get("SHIRINA_PROFILYA", "205"),
         VYSOTA_PROFILYA=kwargs.get("VYSOTA_PROFILYA", "55"),
         POSADOCHNYY_DIAMETR=kwargs.get("POSADOCHNYY_DIAMETR", "16"),
+        SHIPY=str(kwargs.get("SHIPY", "")),
     )
 
 

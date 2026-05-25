@@ -29,6 +29,7 @@ DEDUP_FIELDS_WHEELS = [
     "PROIZVODITEL",
     "MODEL_DISKA",
     "WHEEL_TYPE",
+    "DISK_COLOR",
 ]
 
 
@@ -66,12 +67,17 @@ def canonicalize_name(value: str) -> str:
 
 def canonicalize_tire_posadochnyy_diametr(raw: str) -> str:
     """
-    Для ключа дедупликации: ZR и R перед размером обода считаем эквивалентом (55zr17 -> 55r17).
-    Не меняет сырые данные Product, только нормализацию в ключе.
+    Для ключа дедупликации: та же нормализация, что при экспорте (16/R16/zr17),
+    плюс ZR→R в полном размере (55zr17 -> 55r17). Сырые данные Product не меняет.
     """
-    s = unicodedata.normalize("NFKC", str(raw or "")).strip().lower()
+    from .export import _normalize_tire_diameter
+
+    s = unicodedata.normalize("NFKC", str(raw or "")).strip()
     s = re.sub(r"\s+", "", s)
-    return re.sub(r"zr(\d{1,2}\b)", r"r\1", s)
+    s = _normalize_tire_diameter(s).lower()
+    if "/" in s:
+        s = re.sub(r"zr(\d{1,2}\b)", r"r\1", s)
+    return s
 
 
 def canonicalize_wheel_rim_size(raw: str) -> str:
